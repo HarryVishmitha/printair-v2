@@ -2,14 +2,12 @@
 
 namespace App\Models;
 
-// use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
 class User extends Authenticatable
 {
-    /** @use HasFactory<\Database\Factories\UserFactory> */
     use HasFactory, Notifiable;
 
     /**
@@ -18,9 +16,15 @@ class User extends Authenticatable
      * @var list<string>
      */
     protected $fillable = [
-        'name',
+        'first_name',
+        'last_name',
+        'name',                // keep for Laravel defaults
         'email',
         'password',
+        'whatsapp_number',
+        'role_id',
+        'working_group_id',
+        'status',
     ];
 
     /**
@@ -34,7 +38,7 @@ class User extends Authenticatable
     ];
 
     /**
-     * Get the attributes that should be cast.
+     * The attributes that should be cast.
      *
      * @return array<string, string>
      */
@@ -42,7 +46,62 @@ class User extends Authenticatable
     {
         return [
             'email_verified_at' => 'datetime',
-            'password' => 'hashed',
+            'last_logged_in_at' => 'datetime',
+            'password'          => 'hashed',
+            'login_status'      => 'boolean',
         ];
+    }
+
+    /* =======================
+     |  Relationships
+     |======================= */
+
+    public function role()
+    {
+        return $this->belongsTo(Role::class);
+    }
+
+    public function workingGroup()
+    {
+        return $this->belongsTo(WorkingGroup::class);
+    }
+
+    public function addresses()
+    {
+        return $this->hasMany(Address::class);
+    }
+
+    public function primaryAddress()
+    {
+        return $this->hasOne(Address::class)->where('is_primary', true);
+    }
+
+    /* =======================
+     |  Accessors / Helpers
+     |======================= */
+
+    // Always have a usable display name
+    public function getNameAttribute($value): string
+    {
+        if (! empty($value)) {
+            return $value;
+        }
+
+        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+    }
+
+    public function getFullNameAttribute(): string
+    {
+        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+    }
+
+    public function isActive(): bool
+    {
+        return $this->status === 'active';
+    }
+
+    public function isSuspended(): bool
+    {
+        return $this->status === 'suspended';
     }
 }

@@ -30,15 +30,26 @@ class RegisteredUserController extends Controller
     public function store(Request $request): RedirectResponse
     {
         $request->validate([
-            'name' => ['required', 'string', 'max:255'],
+            'first_name' => ['required', 'string', 'max:255'],
+            'last_name' => ['required', 'string', 'max:255'],
+            'whatsapp_number' => ['nullable', 'string', 'max:20'],
             'email' => ['required', 'string', 'lowercase', 'email', 'max:255', 'unique:'.User::class],
             'password' => ['required', 'confirmed', Rules\Password::defaults()],
         ]);
 
+        $role = \App\Models\Role::where('name', 'User')->first();
+        $workingGroup = \App\Models\WorkingGroup::where('slug', 'public')->first();
+
         $user = User::create([
-            'name' => $request->name,
+            'first_name' => $request->first_name,
+            'last_name' => $request->last_name,
+            'name' => $request->first_name . ' ' . $request->last_name,
             'email' => $request->email,
+            'whatsapp_number' => $request->whatsapp_number,
             'password' => Hash::make($request->password),
+            'role_id' => $role?->id,
+            'working_group_id' => $workingGroup?->id,
+            'status' => 'active',
         ]);
 
         event(new Registered($user));
