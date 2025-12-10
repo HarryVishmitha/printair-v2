@@ -16,7 +16,13 @@ class AuthenticatedSessionController extends Controller
      */
     public function create(): View
     {
-        return view('auth.login');
+        $seo = [
+            'title' => 'Login',
+            'description' => 'Login to your Printair account.',
+            'keywords' => 'login, printair, account',
+        ];
+
+        return view('auth.login', compact('seo'));
     }
 
     /**

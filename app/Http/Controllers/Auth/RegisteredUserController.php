@@ -19,7 +19,13 @@ class RegisteredUserController extends Controller
      */
     public function create(): View
     {
-        return view('auth.register');
+        $seo = [
+            'title' => 'Register',
+            'description' => 'Create a new Printair account.',
+            'keywords' => 'register, printair, account, sign up',
+        ];
+
+        return view('auth.register', compact('seo'));
     }
 
     /**

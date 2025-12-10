@@ -2,11 +2,13 @@
 
 namespace App\Models;
 
+use App\Notifications\VerifyEmailNotification;
+use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
-class User extends Authenticatable
+class User extends Authenticatable implements MustVerifyEmail
 {
     use HasFactory, Notifiable;
 
@@ -25,6 +27,11 @@ class User extends Authenticatable
         'role_id',
         'working_group_id',
         'status',
+        'provider_name',
+        'provider_id',
+        'avatar',
+        'last_logged_in_at',
+        'login_status'
     ];
 
     /**
@@ -47,8 +54,8 @@ class User extends Authenticatable
         return [
             'email_verified_at' => 'datetime',
             'last_logged_in_at' => 'datetime',
-            'password'          => 'hashed',
-            'login_status'      => 'boolean',
+            'password' => 'hashed',
+            'login_status' => 'boolean',
         ];
     }
 
@@ -87,12 +94,12 @@ class User extends Authenticatable
             return $value;
         }
 
-        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+        return trim(($this->first_name ?? '').' '.($this->last_name ?? ''));
     }
 
     public function getFullNameAttribute(): string
     {
-        return trim(($this->first_name ?? '') . ' ' . ($this->last_name ?? ''));
+        return trim(($this->first_name ?? '').' '.($this->last_name ?? ''));
     }
 
     public function isActive(): bool
@@ -103,5 +110,10 @@ class User extends Authenticatable
     public function isSuspended(): bool
     {
         return $this->status === 'suspended';
+    }
+
+    public function sendEmailVerificationNotification(): void
+    {
+        $this->notify(new VerifyEmailNotification);
     }
 }
