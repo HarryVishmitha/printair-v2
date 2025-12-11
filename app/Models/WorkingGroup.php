@@ -49,6 +49,11 @@ class WorkingGroup extends Model
         return $this->hasMany(User::class);
     }
 
+    public function customers()
+    {
+        return $this->hasMany(Customer::class);
+    }
+
     /**
      * Booted Model Events
      * -----------------------------
@@ -122,5 +127,29 @@ class WorkingGroup extends Model
     public function scopeStaff($query)
     {
         return $query->where('is_staff_group', true);
+    }
+
+    /**
+     * Scope to get the public working group.
+     */
+    public function scopePublic($query)
+    {
+        return $query->where('slug', self::PUBLIC_SLUG);
+    }
+
+    /**
+     * Get the public working group instance.
+     */
+    public static function getPublic(): ?self
+    {
+        return static::where('slug', self::PUBLIC_SLUG)->first();
+    }
+
+    /**
+     * Get the public working group ID.
+     */
+    public static function getPublicId(): ?int
+    {
+        return static::where('slug', self::PUBLIC_SLUG)->value('id');
     }
 }

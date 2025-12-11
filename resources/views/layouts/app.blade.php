@@ -57,6 +57,8 @@
     @stack('head')
 </head>
 @php
+    $user = auth()->user();
+
     /**
      * CENTRAL NAV CONFIG
      * Edit all navigation links here in one place.
@@ -110,8 +112,29 @@
                     'icon' => 'solar:users-group-rounded-bold-duotone',
                     'route' => route('admin.working-groups.index'),
                     'active' => request()->routeIs('admin.working-groups.*'),
+                    // Only visible if user can manage working groups (Super/Admin)
+                    'visible' => $user?->can('manage-working-groups') ?? false,
+                ],
+                [
+                    'label' => 'Users',
+                    'icon' => 'solar:user-id-bold-duotone',
+                    'route' => route('admin.users.index'),
+                    'active' => request()->routeIs('admin.users.*'),
+                    // Only Super Admin, Admin, Manager
+                    'visible' => $user?->can('manage-users') ?? false,
                 ],
 
+                // -------------------------
+                // CUSTOMER MANAGEMENT
+                // -------------------------
+                [
+                    'label' => 'Customers',
+                    'icon' => 'solar:users-group-two-rounded-bold-duotone',
+                    'route' => route('admin.customers.index'),
+                    'active' => request()->routeIs('admin.customers.*'),
+                    // Only Super Admin, Admin, Manager
+                    'visible' => $user?->can('manage-customers') ?? false,
+                ],
                 [
                     'label' => 'Settings',
                     'icon' => 'solar:settings-bold-duotone',
@@ -121,8 +144,6 @@
             ],
         ],
     ];
-
-    $user = auth()->user();
 @endphp
 
 <body class="font-sans antialiased bg-slate-50 text-slate-900 h-screen overflow-hidden">
@@ -148,9 +169,11 @@
                             {{ $section['label'] }}
                         </p>
                     @endif
-
                     <div class="space-y-1">
                         @foreach ($section['items'] as $item)
+                            @if (isset($item['visible']) && !$item['visible'])
+                                @continue
+                            @endif
                             <a href="{{ $item['route'] }}"
                                 class="flex items-center gap-2 px-3 py-2 rounded-lg border border-transparent
                                   {{ $item['active']

@@ -31,5 +31,23 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-working-groups', function (User $user) {
             return $user->isAdminOrSuperAdmin();
         });
+
+        /**
+         * Ability: manage-users
+         *
+         * Only Super Admins and Admins may manage system users.
+         */
+        Gate::define('manage-users', function (User $user) {
+            return $user->isAdminOrSuperAdmin();
+        });
+
+        /**
+         * Ability: manage-customers
+         *
+         * Super Admins, Admins, and staff members may manage customers.
+         */
+        Gate::define('manage-customers', function (User $user) {
+            return $user->isAdminOrSuperAdmin() || ($user->role?->is_staff ?? false);
+        });
     }
 }

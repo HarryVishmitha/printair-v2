@@ -5,6 +5,7 @@ use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\WorkingGroupController;
+use App\Http\Controllers\Admin\UserCustomerController;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/home', [HomeController::class, 'index'])->name('home');
@@ -61,6 +62,32 @@ Route::prefix('admin')
             ->name('working-groups.destroy');
     });
 
+// Users management routes
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'verified', 'can:manage-users'])
+    ->group(function () {
+        Route::get('users', [UserCustomerController::class, 'usersIndex'])->name('users.index');
+        Route::get('users/create', [UserCustomerController::class, 'usersCreate'])->name('users.create');
+        Route::post('users', [UserCustomerController::class, 'usersStore'])->name('users.store');
+        Route::get('users/{user}/edit', [UserCustomerController::class, 'usersEdit'])->name('users.edit');
+        Route::put('users/{user}', [UserCustomerController::class, 'usersUpdate'])->name('users.update');
+        Route::delete('users/{user}', [UserCustomerController::class, 'usersDestroy'])->name('users.destroy');
+    });
+
+// Customers management routes
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'verified', 'can:manage-customers'])
+    ->group(function () {
+        Route::get('customers', [UserCustomerController::class, 'customersIndex'])->name('customers.index');
+        Route::get('customers/create', [UserCustomerController::class, 'customersCreate'])->name('customers.create');
+        Route::post('customers', [UserCustomerController::class, 'customersStore'])->name('customers.store');
+        Route::get('customers/{customer}/edit', [UserCustomerController::class, 'customersEdit'])->name('customers.edit');
+        Route::put('customers/{customer}', [UserCustomerController::class, 'customersUpdate'])->name('customers.update');
+        Route::delete('customers/{customer}', [UserCustomerController::class, 'customersDestroy'])->name('customers.destroy');
+    });
+
 
 
 
@@ -91,5 +118,14 @@ Route::middleware('auth')->group(function () {
     Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
     Route::delete('/profile', [ProfileController::class, 'destroy'])->name('profile.destroy');
 });
+
+use App\Http\Controllers\Auth\PasswordChangeController;
+
+Route::get('/password/force-change', [PasswordChangeController::class, 'showChangeForm'])
+    ->middleware(['auth'])
+    ->name('password.force-change');
+
+Route::post('/password/force-change', [PasswordChangeController::class, 'updatePassword'])
+    ->middleware(['auth']);
 
 require __DIR__.'/auth.php';

@@ -57,6 +57,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'last_logged_in_at' => 'datetime',
             'password' => 'hashed',
             'login_status' => 'boolean',
+            'force_password_change' => 'boolean',
         ];
     }
 
@@ -87,6 +88,14 @@ class User extends Authenticatable implements MustVerifyEmail
     public function activityLogs()
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    /**
+     * Get the customer profile linked to this user (if any).
+     */
+    public function customer()
+    {
+        return $this->hasOne(Customer::class);
     }
 
     /* =======================
