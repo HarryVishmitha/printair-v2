@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Http\Requests\ProfileUpdateRequest;
+use App\Services\ActivityLogger;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -16,6 +17,12 @@ class ProfileController extends Controller
      */
     public function edit(Request $request): View
     {
+        ActivityLogger::log(
+            $request->user(),
+            'profile.edit',
+            'Viewed profile edit page'
+        );
+
         return view('profile.edit', [
             'user' => $request->user(),
         ]);
@@ -26,13 +33,29 @@ class ProfileController extends Controller
      */
     public function update(ProfileUpdateRequest $request): RedirectResponse
     {
-        $request->user()->fill($request->validated());
+        $user = $request->user();
 
-        if ($request->user()->isDirty('email')) {
-            $request->user()->email_verified_at = null;
+        $original = $user->getOriginal();
+
+        $user->fill($request->validated());
+
+        if ($user->isDirty('email')) {
+            $user->email_verified_at = null;
         }
 
-        $request->user()->save();
+        $changes = $user->getDirty();
+
+        $user->save();
+
+        ActivityLogger::log(
+            $user,
+            'profile.update',
+            'Updated profile information',
+            [
+                'changes' => $changes,
+                'original' => array_intersect_key($original, $changes),
+            ]
+        );
 
         return Redirect::route('profile.edit')->with('status', 'profile-updated');
     }
@@ -47,6 +70,12 @@ class ProfileController extends Controller
         ]);
 
         $user = $request->user();
+
+        ActivityLogger::log(
+            $user,
+            'profile.destroy',
+            'Deleted user account'
+        );
 
         Auth::logout();
 

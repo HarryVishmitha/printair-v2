@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Models\ActivityLog;
 use App\Notifications\VerifyEmailNotification;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -83,6 +84,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasOne(Address::class)->where('is_primary', true);
     }
 
+    public function activityLogs()
+    {
+        return $this->hasMany(ActivityLog::class);
+    }
+
     /* =======================
      |  Accessors / Helpers
      |======================= */
@@ -110,6 +116,30 @@ class User extends Authenticatable implements MustVerifyEmail
     public function isSuspended(): bool
     {
         return $this->status === 'suspended';
+    }
+
+    /**
+     * Check if user is a Super Admin.
+     */
+    public function isSuperAdmin(): bool
+    {
+        return $this->role?->name === 'Super Admin';
+    }
+
+    /**
+     * Check if user is an Admin.
+     */
+    public function isAdmin(): bool
+    {
+        return $this->role?->name === 'Admin';
+    }
+
+    /**
+     * Check if user is either Admin or Super Admin.
+     */
+    public function isAdminOrSuperAdmin(): bool
+    {
+        return $this->isSuperAdmin() || $this->isAdmin();
     }
 
     public function sendEmailVerificationNotification(): void

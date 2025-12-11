@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use App\Models\User;
+use App\Services\ActivityLogger;
 
 class HomeController extends Controller
 {
@@ -25,7 +26,7 @@ class HomeController extends Controller
         }
     }
 
-    public function index()
+    public function index(Request $request)
     {
         $seo = [
             'title' => 'Home',
@@ -34,6 +35,13 @@ class HomeController extends Controller
         ];
 
         $dashboard = $this->usertype();
+
+        ActivityLogger::log(
+            $request->user(),
+            'home.index',
+            'Viewed home page'
+        );
+
         return view('home', compact('seo', 'dashboard'));
     }
 }

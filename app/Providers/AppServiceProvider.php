@@ -3,6 +3,8 @@
 namespace App\Providers;
 
 use Illuminate\Support\ServiceProvider;
+use Illuminate\Support\Facades\Gate;
+use App\Models\User;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -20,5 +22,14 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         \Illuminate\Support\Facades\Event::subscribe(\App\Listeners\UserLoginSubscriber::class);
+
+        /**
+         * Ability: manage-working-groups
+         *
+         * Only Super Admins and Admins may manage working groups.
+         */
+        Gate::define('manage-working-groups', function (User $user) {
+            return $user->isAdminOrSuperAdmin();
+        });
     }
 }
