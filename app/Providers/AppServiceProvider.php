@@ -49,5 +49,14 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-customers', function (User $user) {
             return $user->isAdminOrSuperAdmin() || ($user->role?->is_staff ?? false);
         });
+
+        /**
+         * Ability: manage-categories
+         *
+         * Only Super Admins and Admins may manage categories.
+         */
+        Gate::define('manage-categories', function (User $user) {
+            return $user->isAdminOrSuperAdmin();
+        });
     }
 }

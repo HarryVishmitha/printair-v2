@@ -76,13 +76,14 @@
             ],
         ],
         [
-            'label' => 'Print Management',
+            'label' => 'Product Management',
             'items' => [
                 [
-                    'label' => 'Orders',
-                    'icon' => 'solar:document-text-bold-duotone',
-                    'route' => '#', // change route name if needed
-                    'active' => request()->routeIs('orders.*'),
+                    'label' => 'Categories',
+                    'icon' => 'solar:add-folder-bold-duotone',
+                    'route' => route('admin.categories.index'),
+                    'active' => request()->routeIs('admin.categories.*'),
+                    'visible' => $user?->can('manage-categories') ?? false,
                 ],
                 [
                     'label' => 'Quotations',

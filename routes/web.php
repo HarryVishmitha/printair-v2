@@ -6,6 +6,7 @@ use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\WorkingGroupController;
 use App\Http\Controllers\Admin\UserCustomerController;
+use App\Http\Controllers\Admin\CategoryController;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/home', [HomeController::class, 'index'])->name('home');
@@ -88,7 +89,18 @@ Route::prefix('admin')
         Route::delete('customers/{customer}', [UserCustomerController::class, 'customersDestroy'])->name('customers.destroy');
     });
 
-
+//Category Management Routes
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'verified', 'can:manage-categories'])
+    ->group(function () {
+        Route::get('categories', [CategoryController::class, 'index'])->name('categories.index');
+        Route::get('categories/create', [CategoryController::class, 'create'])->name('categories.create');
+        Route::post('categories/store', [CategoryController::class, 'store'])->name('categories.store');
+        Route::get('categories/{category}/edit', [CategoryController::class, 'edit'])->name('categories.edit');
+        Route::put('categories/{category}/update', [CategoryController::class, 'update'])->name('categories.update');
+        Route::delete('categories/{category}/delete', [CategoryController::class, 'destroy'])->name('categories.destroy');
+    });
 
 
 Route::middleware('auth')->group(function () {
