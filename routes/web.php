@@ -7,6 +7,7 @@ use Illuminate\Support\Facades\Route;
 use App\Http\Controllers\Admin\WorkingGroupController;
 use App\Http\Controllers\Admin\UserCustomerController;
 use App\Http\Controllers\Admin\CategoryController;
+use \App\Http\Controllers\Admin\ProductController;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/home', [HomeController::class, 'index'])->name('home');
@@ -100,6 +101,57 @@ Route::prefix('admin')
         Route::get('categories/{category}/edit', [CategoryController::class, 'edit'])->name('categories.edit');
         Route::put('categories/{category}/update', [CategoryController::class, 'update'])->name('categories.update');
         Route::delete('categories/{category}/delete', [CategoryController::class, 'destroy'])->name('categories.destroy');
+    });
+
+//Admin Product Management routes
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'verified', 'can:manage-products'])
+    ->group(function () {
+        Route::get('products', [ProductController::class, 'index'])->name('products.index');
+        Route::get('products/create', [ProductController::class, 'create'])->name('products.create');
+        Route::post('products/store', [ProductController::class, 'store'])->name('products.store');
+
+        // Edit + Update
+        Route::get('products/{product}/edit', [ProductController::class, 'edit'])
+            ->name('products.edit');
+
+        Route::put('products/{product}', [ProductController::class, 'update'])
+            ->name('products.update');
+
+        Route::post('products/{product}/wizard/save-draft', [ProductController::class, 'wizardSaveDraft'])
+            ->name('products.wizard.saveDraft');
+
+        Route::post('products/{product}/wizard/publish', [ProductController::class, 'wizardPublish'])
+            ->name('products.wizard.publish');
+
+        // Media + future edit/update routes
+        Route::prefix('products')->name('products.')->group(function () {
+            Route::post('{product}/media/images', [ProductController::class, 'uploadImage'])->name('media.images.upload');
+            Route::patch('{product}/media/images/reorder', [ProductController::class, 'reorderImages'])->name('media.images.reorder');
+            Route::patch('{product}/media/images/{image}/featured', [ProductController::class, 'setFeaturedImage'])->name('media.images.featured');
+            Route::patch('{product}/media/images/{image}', [ProductController::class, 'updateImage'])->name('media.images.update');
+            Route::delete('{product}/media/images/{image}', [ProductController::class, 'deleteImage'])->name('media.images.delete');
+
+            Route::post('{product}/media/files', [ProductController::class, 'uploadFile'])->name('media.files.upload');
+            Route::patch('{product}/media/files/reorder', [ProductController::class, 'reorderFiles'])->name('media.files.reorder');
+            Route::patch('{product}/media/files/{file}', [ProductController::class, 'updateFile'])->name('media.files.update');
+            Route::delete('{product}/media/files/{file}', [ProductController::class, 'deleteFile'])->name('media.files.delete');
+        });
+    });
+
+
+//Admin Roll Management routes
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'verified', 'can:manage-rolls'])
+    ->group(function () {
+        Route::get('rolls', [\App\Http\Controllers\Admin\RollController::class, 'index'])->name('rolls.index');
+        Route::get('rolls/create', [\App\Http\Controllers\Admin\RollController::class, 'create'])->name('rolls.create');
+        Route::post('rolls/store', [\App\Http\Controllers\Admin\RollController::class, 'store'])->name('rolls.store');
+        Route::get('rolls/{roll}/edit', [\App\Http\Controllers\Admin\RollController::class, 'edit'])->name('rolls.edit');
+        Route::patch('rolls/{roll}/update', [\App\Http\Controllers\Admin\RollController::class, 'update'])->name('rolls.update');
+        Route::delete('rolls/{roll}/delete', [\App\Http\Controllers\Admin\RollController::class, 'destroy'])->name('rolls.destroy');
     });
 
 

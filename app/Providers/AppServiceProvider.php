@@ -58,5 +58,29 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-categories', function (User $user) {
             return $user->isAdminOrSuperAdmin();
         });
+
+        /**
+         * Ability: manage-products
+         * 
+         * Only super admins and admins may manage products.
+         */
+
+        Gate::define('manage-products', function (User $user) {
+            return $user->isAdminOrSuperAdmin();
+        });
+
+        /**
+         * Ability: manage-rolls
+         * 
+         * Only super admins and admins may manage rolls.
+         */
+
+        Gate::define('manage-rolls', function (User $user) {
+            return $user->isAdminOrSuperAdmin();
+        });
+
+        Gate::define('manage-product-rolls', function (User $user) {
+            return $user->isAdminOrSuperAdmin() || ($user->role?->is_staff ?? false);
+        });
     }
 }

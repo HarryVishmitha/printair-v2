@@ -86,22 +86,29 @@
                     'visible' => $user?->can('manage-categories') ?? false,
                 ],
                 [
-                    'label' => 'Quotations',
-                    'icon' => 'solar:bill-list-bold-duotone',
-                    'route' => '#', // change route name if needed
-                    'active' => request()->routeIs('quotes.*'),
-                ],
-                [
                     'label' => 'Products',
                     'icon' => 'solar:box-bold-duotone',
-                    'route' => '#', // change route name if needed
-                    'active' => request()->routeIs('products.*'),
+                    'route' => route('admin.products.index'), // change route name if needed
+                    'active' => request()->routeIs('admin.products.*'),
+                    'visible' => $user?->can('manage-products') ?? false,
                 ],
                 [
                     'label' => 'Clients',
                     'icon' => 'solar:users-group-two-rounded-bold-duotone',
                     'route' => '#', // change route name if needed
                     'active' => request()->routeIs('clients.*'),
+                ],
+            ],
+        ],
+        [
+            'label' => 'Inventory Management',
+            'items' => [
+                [
+                    'label' => 'Rolls',
+                    'icon' => 'solar:box-bold-duotone',
+                    'route' => route('admin.rolls.index'), // change route name if needed
+                    'active' => request()->routeIs('admin.rolls.*'),
+                    'visible' => $user?->can('manage-rolls') ?? false,
                 ],
             ],
         ],

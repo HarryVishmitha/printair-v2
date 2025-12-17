@@ -90,6 +90,11 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->hasMany(ActivityLog::class);
     }
 
+    public function pricingAudits()
+    {
+        return $this->hasMany(PricingAudit::class);
+    }
+
     /**
      * Get the customer profile linked to this user (if any).
      */
@@ -154,5 +159,11 @@ class User extends Authenticatable implements MustVerifyEmail
     public function sendEmailVerificationNotification(): void
     {
         $this->notify(new VerifyEmailNotification);
+    }
+
+    //has role or permission
+    public function hasRoleOrPermission($ability): bool
+    {
+        return $this->hasRole($ability) || $this->hasPermissionTo($ability);
     }
 }
