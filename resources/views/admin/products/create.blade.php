@@ -141,6 +141,22 @@
                             @error('slug') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                         </div>
 
+                        <div class="md:col-span-2">
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Long Description
+                            </label>
+                            <textarea
+                                name="long_description"
+                                x-model="form.long_description"
+                                rows="10"
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm font-mono leading-relaxed focus:border-[#ff4b5c] focus:bg-white focus:ring-2 focus:ring-[#ff4b5c]/20"
+                                placeholder="<div class=&quot;space-y-4&quot;>\n  <p class=&quot;text-slate-700&quot;>Write your product description here…</p>\n</div>"></textarea>
+                            <p class="mt-1 text-xs text-slate-500">
+                                Add HTML with Tailwind classes (no editor) — this content will be rendered on the product page.
+                            </p>
+                            @error('long_description') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                        </div>
+
                         <div>
                             <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
                                 Category
@@ -1146,6 +1162,23 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                        Description Preview
+                                    </div>
+
+                                    <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 overflow-x-auto">
+                                        <template x-if="form.long_description && form.long_description.trim().length">
+                                            <div class="text-sm text-slate-800" x-html="form.long_description"></div>
+                                        </template>
+                                        <template x-if="!(form.long_description && form.long_description.trim().length)">
+                                            <div class="text-sm text-slate-500">
+                                                No description added yet. Go back to Step 1 to add it.
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
                             </div>
 
                             {{-- Right: checklist / summary --}}
@@ -1386,6 +1419,7 @@
                     name: old.name ?? '',
                     product_code: old.product_code ?? '',
                     slug: old.slug ?? '',
+                    long_description: old.long_description ?? old.description ?? '',
                     category_id: old.category_id ?? '',
                     product_type: old.product_type ?? 'standard',
                     status: old.status ?? 'active',
@@ -1579,6 +1613,7 @@
                 },
 
                 syncGroupSlug(g) {
+                    if (this.isDbId(g?.id)) return;
                     g.slug = this.slugify(g.name);
                 },
 
@@ -1596,6 +1631,7 @@
                 },
 
                 syncValueSlug(group, v) {
+                    if (this.isDbId(v?.id)) return;
                     v.slug = this.slugify(v.label);
                 },
 
@@ -1649,6 +1685,11 @@
                     });
                 },
 
+                isDbId(v) {
+                    if (v === null || v === undefined) return false;
+                    return /^\d+$/.test(String(v));
+                },
+
                 enableAllVariants() {
                     this.variants = (this.variants || []).map(v => ({ ...v, enabled: true }));
                 },
@@ -1660,18 +1701,25 @@
                 variantsPayload() {
                     // This is what backend receives.
                     return {
-                        options: (this.options || []).map(g => ({
+                        options: (this.options || []).map((g, gi) => ({
+                            id: this.isDbId(g?.id) ? Number(g.id) : null,
                             name: g.name,
                             slug: this.slugify(g.slug || g.name),
-                            values: (g.values || []).map(v => ({
+                            sort_order: g?.sort_order ?? (gi + 1),
+                            is_active: true,
+                            values: (g.values || []).map((v, vi) => ({
+                                id: this.isDbId(v?.id) ? Number(v.id) : null,
                                 label: v.label,
                                 slug: this.slugify(v.slug || v.label),
+                                sort_order: v?.sort_order ?? (vi + 1),
+                                is_active: (typeof v?.is_active === 'boolean') ? v.is_active : true,
                             })).filter(v => v.slug.length > 0),
                         })).filter(g => g.slug && g.values.length > 0),
 
                         variants: (this.variants || [])
                             .filter(v => v.enabled)
                             .map(v => ({
+                                id: this.isDbId(v?.id) ? Number(v.id) : null,
                                 key: v.key,
                                 label: v.label,
                                 price: v.price ?? null,

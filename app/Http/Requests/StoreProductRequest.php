@@ -22,6 +22,8 @@ class StoreProductRequest extends FormRequest
             'name' => ['required', 'string', 'max:200'],
             'slug' => ['required', 'string', 'max:220', 'unique:products,slug'],
             'short_description' => ['nullable', 'string', 'max:255'],
+            'long_description' => ['nullable', 'string'],
+            // Backward-compat for older forms/clients.
             'description' => ['nullable', 'string'],
 
             'product_type' => ['required', Rule::in(['standard','dimension_based','finishing','service'])],

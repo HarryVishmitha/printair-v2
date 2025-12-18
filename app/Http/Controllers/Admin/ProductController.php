@@ -26,14 +26,410 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use App\Support\ProductWizardCache;
+use Illuminate\Filesystem\FilesystemAdapter;
 
 class ProductController extends Controller
 {
     use AuthorizesRequests;
+
+    public function updateStatus(Request $request, Product $product)
+    {
+        $this->authorize('update', $product);
+
+        $validated = $request->validate([
+            'status' => ['required', 'in:active,inactive,draft'],
+        ]);
+
+        $product->update([
+            'status' => $validated['status'],
+            'updated_by' => Auth::user()?->id,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'status' => $product->status,
+        ]);
+    }
+
+    public function updateVisibility(Request $request, Product $product)
+    {
+        $this->authorize('update', $product);
+
+        $validated = $request->validate([
+            'visibility' => ['required', 'in:public,internal'],
+        ]);
+
+        $product->update([
+            'visibility' => $validated['visibility'],
+            'updated_by' => Auth::user()?->id,
+        ]);
+
+        return response()->json([
+            'ok' => true,
+            'visibility' => $product->visibility,
+        ]);
+    }
+
+    public function destroy(Product $product)
+    {
+        $this->authorize('delete', $product);
+
+        try {
+            $isReferencedAsFinishing = ProductFinishingLink::query()
+                ->where('finishing_product_id', $product->id)
+                ->whereNull('deleted_at')
+                ->exists();
+
+            if ($isReferencedAsFinishing) {
+                return redirect()
+                    ->route('admin.products.index')
+                    ->with('error', 'This product is linked as a finishing on other products, so it cannot be deleted.');
+            }
+
+            DB::transaction(function () use ($product) {
+                $product->update([
+                    'updated_by' => Auth::user()?->id,
+                ]);
+
+                $product->delete();
+            });
+
+            return redirect()
+                ->route('admin.products.index')
+                ->with('success', 'Product deleted successfully.');
+        } catch (\Throwable $e) {
+            Log::error('Product delete failed', [
+                'user_id' => Auth::user()?->id,
+                'product_id' => $product->id,
+                'error' => $e->getMessage(),
+            ]);
+
+            return redirect()
+                ->route('admin.products.index')
+                ->with('error', 'Unable to delete product. Please try again.');
+        }
+    }
+
+    private function syncVariantsInPlace(Product $product, array $payload, ?ProductPricing $pricingRow): void
+    {
+        $optionsInput = $payload['options'] ?? [];
+        $variantsInput = $payload['variants'] ?? [];
+
+        if (! is_array($optionsInput) || ! is_array($variantsInput)) {
+            throw ValidationException::withMessages([
+                'variants_payload' => 'Invalid variants payload structure.',
+            ]);
+        }
+
+        if (count($optionsInput) > 8) {
+            throw ValidationException::withMessages([
+                'variants_payload' => 'Too many option groups. Keep it within 8 groups.',
+            ]);
+        }
+
+        if (count($variantsInput) > 800) {
+            throw ValidationException::withMessages([
+                'variants_payload' => 'Too many variants generated. Reduce options or disable extra combinations.',
+            ]);
+        }
+
+        $userId = Auth::user()?->id;
+
+        $seenOptionGroupIds = [];
+        $seenOptionIds = [];
+        $seenVariantSetIds = [];
+
+        // Map: ["groupSlug:valueSlug" => option_id] based on DB codes
+        $optionIdByKey = [];
+
+        foreach ($optionsInput as $groupIndex => $g) {
+            if (! is_array($g)) {
+                continue;
+            }
+
+            $incomingGroupId = (isset($g['id']) && is_numeric($g['id'])) ? (int) $g['id'] : null;
+            $groupName = trim((string) ($g['name'] ?? ''));
+
+            if ($groupName === '') {
+                throw ValidationException::withMessages([
+                    'variants_payload' => 'Option group name cannot be empty.',
+                ]);
+            }
+
+            $optionGroup = null;
+            if ($incomingGroupId) {
+                $optionGroup = OptionGroup::query()->find($incomingGroupId);
+                if (! $optionGroup) {
+                    throw ValidationException::withMessages([
+                        'variants_payload' => 'One or more option groups are invalid. Please reload and try again.',
+                    ]);
+                }
+
+                if ($optionGroup->name !== $groupName) {
+                    $optionGroup->name = $groupName;
+                    $optionGroup->save();
+                }
+            } else {
+                $groupSlug = trim((string) ($g['slug'] ?? $groupName));
+                $groupCode = Str::slug($groupSlug);
+
+                if ($groupCode === '') {
+                    throw ValidationException::withMessages([
+                        'variants_payload' => 'Option group slug cannot be empty.',
+                    ]);
+                }
+
+                $optionGroup = OptionGroup::query()->firstOrCreate(
+                    ['code' => $groupCode],
+                    ['name' => $groupName, 'description' => null]
+                );
+
+                if ($optionGroup->name !== $groupName) {
+                    $optionGroup->name = $groupName;
+                    $optionGroup->save();
+                }
+            }
+
+            $seenOptionGroupIds[] = $optionGroup->id;
+
+            $pog = ProductOptionGroup::withTrashed()->firstOrNew([
+                'product_id' => $product->id,
+                'option_group_id' => $optionGroup->id,
+            ]);
+
+            if ($pog->trashed()) {
+                $pog->restore();
+            }
+
+            $pog->is_required = true;
+            $pog->sort_index = (int) ($g['sort_order'] ?? ($groupIndex + 1));
+            $pog->updated_by = $userId;
+            if (! $pog->exists) {
+                $pog->created_by = $userId;
+            }
+            $pog->save();
+
+            $values = $g['values'] ?? [];
+            if (! is_array($values)) {
+                $values = [];
+            }
+
+            $valueCount = 0;
+
+            foreach ($values as $valueIndex => $v) {
+                if (! is_array($v)) {
+                    continue;
+                }
+
+                $valueCount++;
+                if ($valueCount > 80) {
+                    throw ValidationException::withMessages([
+                        'variants_payload' => 'Too many values in a group. Keep it within 80 values per group.',
+                    ]);
+                }
+
+                $incomingOptionId = (isset($v['id']) && is_numeric($v['id'])) ? (int) $v['id'] : null;
+                $label = trim((string) ($v['label'] ?? ''));
+                if ($label === '') {
+                    throw ValidationException::withMessages([
+                        'variants_payload' => 'Variant option label cannot be empty.',
+                    ]);
+                }
+
+                $option = null;
+                if ($incomingOptionId) {
+                    $option = Option::query()->find($incomingOptionId);
+                    if (! $option || (int) $option->option_group_id !== (int) $optionGroup->id) {
+                        throw ValidationException::withMessages([
+                            'variants_payload' => 'One or more options are invalid. Please reload and try again.',
+                        ]);
+                    }
+
+                    if ($option->label !== $label) {
+                        $option->label = $label;
+                        $option->save();
+                    }
+                } else {
+                    $valueSlug = trim((string) ($v['slug'] ?? $label));
+                    $valueCode = Str::slug($valueSlug);
+                    if ($valueCode === '') {
+                        throw ValidationException::withMessages([
+                            'variants_payload' => 'Variant option slug cannot be empty.',
+                        ]);
+                    }
+
+                    $option = Option::query()->firstOrCreate(
+                        ['option_group_id' => $optionGroup->id, 'code' => $valueCode],
+                        ['label' => $label, 'meta' => null]
+                    );
+
+                    if ($option->label !== $label) {
+                        $option->label = $label;
+                        $option->save();
+                    }
+                }
+
+                $seenOptionIds[] = $option->id;
+
+                $po = ProductOption::withTrashed()->firstOrNew([
+                    'product_id' => $product->id,
+                    'option_id' => $option->id,
+                ]);
+
+                if ($po->trashed()) {
+                    $po->restore();
+                }
+
+                $po->is_active = array_key_exists('is_active', $v) ? (bool) $v['is_active'] : true;
+                $po->sort_index = (int) ($v['sort_order'] ?? ($valueIndex + 1));
+                $po->updated_by = $userId;
+                if (! $po->exists) {
+                    $po->created_by = $userId;
+                }
+                $po->save();
+
+                $groupSlug = $optionGroup->code;
+                $valueSlug = $option->code;
+                $optionIdByKey["{$groupSlug}:{$valueSlug}"] = $option->id;
+            }
+        }
+
+        // Soft-delete pivots that are no longer present
+        ProductOptionGroup::query()
+            ->where('product_id', $product->id)
+            ->whereNull('deleted_at')
+            ->whereNotIn('option_group_id', $seenOptionGroupIds ?: [0])
+            ->delete();
+
+        ProductOption::query()
+            ->where('product_id', $product->id)
+            ->whereNull('deleted_at')
+            ->whereNotIn('option_id', $seenOptionIds ?: [0])
+            ->delete();
+
+        foreach ($variantsInput as $variantIndex => $vr) {
+            if (! is_array($vr)) {
+                continue;
+            }
+
+            $variantId = (isset($vr['id']) && is_numeric($vr['id'])) ? (int) $vr['id'] : null;
+            $variantKey = trim((string) ($vr['key'] ?? ''));
+            $selections = $vr['selections'] ?? [];
+
+            if ($variantKey === '' || ! is_array($selections) || count($selections) === 0) {
+                continue;
+            }
+
+            $optionIds = [];
+            foreach ($selections as $s) {
+                if (! is_array($s)) {
+                    continue;
+                }
+                $gSlug = trim((string) ($s['group_slug'] ?? ''));
+                $vSlug = trim((string) ($s['value_slug'] ?? ''));
+                if ($gSlug === '' || $vSlug === '') {
+                    continue;
+                }
+
+                $optId = $optionIdByKey["{$gSlug}:{$vSlug}"] ?? null;
+                if (! $optId) {
+                    throw ValidationException::withMessages([
+                        'variants_payload' => "Variant selection not found: {$gSlug}:{$vSlug}. Rebuild variants and try again.",
+                    ]);
+                }
+                $optionIds[] = (int) $optId;
+            }
+
+            $optionIds = array_values(array_unique($optionIds));
+            if (count($optionIds) === 0) {
+                continue;
+            }
+
+            $set = null;
+
+            if ($variantId) {
+                $set = ProductVariantSet::query()
+                    ->where('product_id', $product->id)
+                    ->where('id', $variantId)
+                    ->first();
+            }
+
+            if (! $set) {
+                $set = ProductVariantSet::withTrashed()->firstOrNew([
+                    'product_id' => $product->id,
+                    'code' => $variantKey,
+                ]);
+
+                if ($set->trashed()) {
+                    $set->restore();
+                }
+            }
+
+            $set->code = $variantKey;
+            $set->is_active = array_key_exists('enabled', $vr) ? (bool) $vr['enabled'] : true;
+            $set->updated_by = $userId;
+            if (! $set->exists) {
+                $set->created_by = $userId;
+            }
+            $set->save();
+
+            $seenVariantSetIds[] = $set->id;
+
+            ProductVariantSetItem::query()
+                ->where('variant_set_id', $set->id)
+                ->delete();
+
+            foreach ($optionIds as $optId) {
+                ProductVariantSetItem::query()->create([
+                    'variant_set_id' => $set->id,
+                    'option_id' => $optId,
+                ]);
+            }
+
+            if ($pricingRow instanceof ProductPricing) {
+                $price = $vr['price'] ?? null;
+                $hasPrice = $price !== null && $price !== '' && is_numeric($price);
+
+                if ($hasPrice) {
+                    ProductVariantPricing::query()->updateOrCreate(
+                        ['product_pricing_id' => $pricingRow->id, 'variant_set_id' => $set->id],
+                        [
+                            'fixed_price' => (float) $price,
+                            'rate_per_sqft' => null,
+                            'offcut_rate_per_sqft' => null,
+                            'min_charge' => null,
+                            'is_active' => true,
+                            'updated_by' => $userId,
+                            'created_by' => $userId,
+                        ]
+                    );
+                } else {
+                    ProductVariantPricing::query()
+                        ->where('product_pricing_id', $pricingRow->id)
+                        ->where('variant_set_id', $set->id)
+                        ->delete();
+                }
+            }
+        }
+
+        // Soft-disable variant sets not present anymore
+        ProductVariantSet::query()
+            ->where('product_id', $product->id)
+            ->whereNotIn('id', $seenVariantSetIds ?: [0])
+            ->update(['is_active' => false, 'updated_by' => $userId]);
+
+        if ($pricingRow instanceof ProductPricing) {
+            ProductVariantPricing::query()
+                ->where('product_pricing_id', $pricingRow->id)
+                ->whereNotIn('variant_set_id', $seenVariantSetIds ?: [0])
+                ->delete();
+        }
+    }
 
     public function index(Request $request)
     {
@@ -175,6 +571,111 @@ class ProductController extends Controller
                 ->latest('id')
                 ->first();
 
+            // Build variants payload for the wizard (with existing DB IDs)
+            $productOptionGroups = ProductOptionGroup::query()
+                ->with(['optionGroup:id,code,name'])
+                ->where('product_id', $product->id)
+                ->whereNull('deleted_at')
+                ->orderBy('sort_index')
+                ->get();
+
+            $productOptions = ProductOption::query()
+                ->with(['option:id,option_group_id,code,label'])
+                ->where('product_id', $product->id)
+                ->whereNull('deleted_at')
+                ->orderBy('sort_index')
+                ->get();
+
+            $productOptionsByGroupId = $productOptions
+                ->filter(fn ($po) => $po->option !== null)
+                ->groupBy(fn ($po) => (int) $po->option->option_group_id);
+
+            $optionGroupsPayload = $productOptionGroups
+                ->filter(fn ($pog) => $pog->optionGroup !== null)
+                ->values()
+                ->map(function ($pog, $i) use ($productOptionsByGroupId) {
+                    $og = $pog->optionGroup;
+
+                    $values = ($productOptionsByGroupId[(int) $og->id] ?? collect())
+                        ->values()
+                        ->map(function ($po, $j) {
+                            $opt = $po->option;
+
+                            return [
+                                'id' => $opt->id,
+                                'label' => $opt->label,
+                                'slug' => $opt->code,
+                                'sort_order' => (int) ($po->sort_index ?? ($j + 1)),
+                                'is_active' => (bool) ($po->is_active ?? true),
+                            ];
+                        })
+                        ->all();
+
+                    return [
+                        'id' => $og->id,
+                        'name' => $og->name,
+                        'slug' => $og->code,
+                        'sort_order' => (int) ($pog->sort_index ?? ($i + 1)),
+                        'is_active' => true,
+                        'values' => $values,
+                    ];
+                })
+                ->all();
+
+            $variantPriceBySetId = collect();
+            if ($publicPricing) {
+                $variantPriceBySetId = $publicPricing->variantPricings()
+                    ->whereNull('deleted_at')
+                    ->get()
+                    ->keyBy('variant_set_id');
+            }
+
+            $variantSets = ProductVariantSet::query()
+                ->with(['items.option.group'])
+                ->where('product_id', $product->id)
+                ->whereNull('deleted_at')
+                ->get();
+
+            $variantsPayload = $variantSets
+                ->map(function ($set) use ($variantPriceBySetId) {
+                    $selections = collect($set->items ?? [])
+                        ->map(function ($item) {
+                            $opt = $item->option;
+                            $grp = $opt?->group;
+
+                            if (! $opt || ! $grp) {
+                                return null;
+                            }
+
+                            return [
+                                'group_name' => $grp->name,
+                                'group_slug' => $grp->code,
+                                'value_label' => $opt->label,
+                                'value_slug' => $opt->code,
+                            ];
+                        })
+                        ->filter()
+                        ->sortBy('group_slug')
+                        ->values()
+                        ->all();
+
+                    $key = collect($selections)
+                        ->map(fn ($s) => "{$s['group_slug']}:{$s['value_slug']}")
+                        ->implode('|');
+
+                    $priceRow = $variantPriceBySetId->get($set->id);
+
+                    return [
+                        'id' => $set->id,
+                        'key' => $set->code ?: $key,
+                        'enabled' => (bool) ($set->is_active ?? true),
+                        'price' => $priceRow?->fixed_price ?? '',
+                        'selections' => $selections,
+                    ];
+                })
+                ->values()
+                ->all();
+
             $selectedRollIds = ProductRoll::query()
                 ->where('product_id', $product->id)
                 ->whereNull('deleted_at')
@@ -212,7 +713,12 @@ class ProductController extends Controller
                 'slug' => $product->slug,
                 'product_code' => $product->product_code,
                 'short_description' => $product->short_description,
-                'description' => $product->description,
+                'long_description' => Schema::hasColumn('products', 'long_description')
+                    ? ($product->long_description ?? null)
+                    : ($product->description ?? null),
+                'description' => Schema::hasColumn('products', 'long_description')
+                    ? ($product->long_description ?? null)
+                    : ($product->description ?? null),
                 'product_type' => $product->product_type,
                 'visibility' => $product->visibility,
                 'status' => $product->status,
@@ -254,6 +760,33 @@ class ProductController extends Controller
                 'roll_ids' => $selectedRollIds,
                 'finishing_ids' => $selectedFinishingIds,
                 'finishing_config' => $finishingConfig,
+
+                'variants_payload' => [
+                    'options' => $optionGroupsPayload,
+                    'variants' => $variantsPayload,
+                ],
+
+                'existing_images' => $product->images
+                    ? $product->images->map(fn ($img) => [
+                        'id' => $img->id,
+                        'url' => Storage::url($img->path),
+                        'path' => $img->path,
+                        'is_featured' => (bool) ($img->is_featured ?? false),
+                        'sort_index' => (int) ($img->sort_index ?? 0),
+                        'alt_text' => $img->alt_text ?? null,
+                    ])->values()->all()
+                    : [],
+
+                'existing_files' => $product->files
+                    ? $product->files->map(fn ($f) => [
+                        'id' => $f->id,
+                        'label' => $f->label,
+                        'visibility' => $f->visibility,
+                        'file_type' => $f->file_type,
+                        'url' => Storage::url($f->file_path),
+                        'path' => $f->file_path,
+                    ])->values()->all()
+                    : [],
             ];
 
             return view('admin.products.edit', [
@@ -288,6 +821,9 @@ class ProductController extends Controller
             }
             $data['slug'] = Str::slug($slugSource);
 
+            $descriptionValue = $data['long_description'] ?? ($data['description'] ?? null);
+            $descriptionColumn = Schema::hasColumn('products', 'long_description') ? 'long_description' : 'description';
+
             DB::beginTransaction();
 
             $product->update([
@@ -296,7 +832,7 @@ class ProductController extends Controller
                 'name' => $data['name'],
                 'slug' => $data['slug'],
                 'short_description' => $data['short_description'] ?? null,
-                'description' => $data['description'] ?? null,
+                $descriptionColumn => $descriptionValue,
                 'product_type' => $data['product_type'],
                 'visibility' => $data['visibility'],
                 'status' => $data['status'],
@@ -410,202 +946,7 @@ class ProductController extends Controller
                         ]);
                     }
 
-                    $optionsPayload = $payload['options'] ?? [];
-                    $variantsPayload = $payload['variants'] ?? [];
-
-                    if (! is_array($optionsPayload) || ! is_array($variantsPayload)) {
-                        throw ValidationException::withMessages([
-                            'variants_payload' => 'Invalid variants payload structure.',
-                        ]);
-                    }
-
-                    if (count($optionsPayload) > 8) {
-                        throw ValidationException::withMessages([
-                            'variants_payload' => 'Too many option groups. Keep it within 8 groups.',
-                        ]);
-                    }
-                    if (count($variantsPayload) > 800) {
-                        throw ValidationException::withMessages([
-                            'variants_payload' => 'Too many variants generated. Reduce options or disable extra combinations.',
-                        ]);
-                    }
-
-                    // Clear existing product option/variant records (idempotent rebuild)
-                    ProductVariantSet::where('product_id', $product->id)->delete();
-                    ProductOption::where('product_id', $product->id)->delete();
-                    ProductOptionGroup::where('product_id', $product->id)->delete();
-
-                    if ($pricingRow instanceof ProductPricing) {
-                        $pricingRow->variantPricings()->delete();
-                    }
-
-                    $userId = Auth::user()?->id;
-
-                    // Map: [group_slug => option_group_id]
-                    $groupIdBySlug = [];
-
-                    // Map: ["groupSlug:valueSlug" => option_id]
-                    $optionIdByKey = [];
-
-                    // Map: [variant_key => variant_set_id] for later pricing
-                    $variantSetIdByKey = [];
-
-                    foreach ($optionsPayload as $gi => $g) {
-                        $groupName = trim((string) ($g['name'] ?? ''));
-                        $groupSlug = trim((string) ($g['slug'] ?? ''));
-                        $values = $g['values'] ?? [];
-
-                        if ($groupName === '' || $groupSlug === '' || ! is_array($values) || count($values) === 0) {
-                            continue;
-                        }
-
-                        $optionGroup = OptionGroup::query()->firstOrCreate(
-                            ['code' => $groupSlug],
-                            ['name' => $groupName, 'description' => null]
-                        );
-
-                        if ($optionGroup->name !== $groupName) {
-                            $optionGroup->name = $groupName;
-                            $optionGroup->save();
-                        }
-
-                        $groupIdBySlug[$groupSlug] = $optionGroup->id;
-
-                        ProductOptionGroup::query()->create([
-                            'product_id' => $product->id,
-                            'option_group_id' => $optionGroup->id,
-                            'is_required' => true,
-                            'sort_index' => (int) $gi,
-                            'created_by' => $userId,
-                            'updated_by' => $userId,
-                        ]);
-
-                        $valueCount = 0;
-
-                        foreach ($values as $vi => $v) {
-                            $label = trim((string) ($v['label'] ?? ''));
-                            $slug = trim((string) ($v['slug'] ?? ''));
-
-                            if ($label === '' || $slug === '') {
-                                continue;
-                            }
-
-                            $valueCount++;
-
-                            if ($valueCount > 80) {
-                                throw ValidationException::withMessages([
-                                    'variants_payload' => 'Too many values in a group. Keep it within 80 values per group.',
-                                ]);
-                            }
-
-                            $option = Option::query()->firstOrCreate(
-                                ['option_group_id' => $optionGroup->id, 'code' => $slug],
-                                ['label' => $label, 'meta' => null]
-                            );
-
-                            if ($option->label !== $label) {
-                                $option->label = $label;
-                                $option->save();
-                            }
-
-                            $optionIdByKey["{$groupSlug}:{$slug}"] = $option->id;
-
-                            ProductOption::query()->create([
-                                'product_id' => $product->id,
-                                'option_id' => $option->id,
-                                'is_active' => true,
-                                'sort_index' => (int) $vi,
-                                'created_by' => $userId,
-                                'updated_by' => $userId,
-                            ]);
-                        }
-                    }
-
-                    foreach ($variantsPayload as $vr) {
-                        $variantKey = trim((string) ($vr['key'] ?? ''));
-                        $enabled = (bool) ($vr['enabled'] ?? true);
-                        $selections = $vr['selections'] ?? [];
-
-                        if ($variantKey === '' || ! is_array($selections) || count($selections) === 0) {
-                            continue;
-                        }
-
-                        $set = ProductVariantSet::query()->create([
-                            'product_id' => $product->id,
-                            'code' => $variantKey,
-                            'is_active' => $enabled ? 1 : 0,
-                            'created_by' => $userId,
-                            'updated_by' => $userId,
-                        ]);
-
-                        $variantSetIdByKey[$variantKey] = $set->id;
-
-                        $usedOptionIds = [];
-
-                        foreach ($selections as $s) {
-                            $gSlug = trim((string) ($s['group_slug'] ?? ''));
-                            $vSlug = trim((string) ($s['value_slug'] ?? ''));
-
-                            if ($gSlug === '' || $vSlug === '') {
-                                continue;
-                            }
-
-                            $optId = $optionIdByKey["{$gSlug}:{$vSlug}"] ?? null;
-                            if (! $optId) {
-                                throw ValidationException::withMessages([
-                                    'variants_payload' => "Variant selection not found: {$gSlug}:{$vSlug}. Rebuild variants and try again.",
-                                ]);
-                            }
-
-                            $usedOptionIds[] = $optId;
-                        }
-
-                        $usedOptionIds = array_values(array_unique($usedOptionIds));
-
-                        foreach ($usedOptionIds as $optId) {
-                            ProductVariantSetItem::query()->create([
-                                'variant_set_id' => $set->id,
-                                'option_id' => $optId,
-                            ]);
-                        }
-                    }
-
-                    if ($pricingRow instanceof ProductPricing) {
-                        foreach ($variantsPayload as $vr) {
-                            $variantKey = trim((string) ($vr['key'] ?? ''));
-                            $price = $vr['price'] ?? null;
-
-                            if ($variantKey === '' || $price === null || $price === '') {
-                                continue;
-                            }
-
-                            $setId = $variantSetIdByKey[$variantKey] ?? null;
-                            if (! $setId) {
-                                continue;
-                            }
-
-                            $pricingRow->variantPricings()->create([
-                                'variant_set_id' => $setId,
-                                'fixed_price' => (float) $price,
-                                'rate_per_sqft' => null,
-                                'offcut_rate_per_sqft' => null,
-                                'min_charge' => null,
-                                'is_active' => true,
-                                'created_by' => $userId,
-                                'updated_by' => $userId,
-                            ]);
-                        }
-                    }
-
-                    $meta = is_array($product->meta) ? $product->meta : (json_decode($product->meta ?? '[]', true) ?: []);
-                    $meta['variants_payload'] = [
-                        'options_count' => count($optionsPayload),
-                        'variants_count' => count($variantsPayload),
-                        'stored_at' => now()->toDateTimeString(),
-                    ];
-                    $product->meta = $meta;
-                    $product->updated_by = $userId;
-                    $product->save();
+                    $this->syncVariantsInPlace($product, $payload, $pricingRow);
                 }
             } catch (ValidationException $e) {
                 throw $e;
@@ -699,9 +1040,12 @@ class ProductController extends Controller
                     $config = [];
                 }
 
-                ProductFinishingLink::query()
+                $userId = Auth::user()?->id;
+
+                $existingByFinishingId = ProductFinishingLink::withTrashed()
                     ->where('product_id', $product->id)
-                    ->delete();
+                    ->get()
+                    ->keyBy(fn ($l) => (int) $l->finishing_product_id);
 
                 if (count($finishingIds) > 0) {
                     $validIds = Product::query()
@@ -717,9 +1061,8 @@ class ProductController extends Controller
                         ]);
                     }
 
-                    $userId = Auth::user()?->id;
-
                     foreach ($finishingIds as $idx => $finishingId) {
+                        $finishingId = (int) $finishingId;
                         $c = $config[$finishingId] ?? [];
 
                         $allowedModes = ['per_piece', 'per_side', 'flat'];
@@ -757,18 +1100,55 @@ class ProductController extends Controller
                         $isRequired = (bool) ($c['is_required'] ?? false);
                         $sortIndex = is_numeric($c['sort_index'] ?? null) ? (int) $c['sort_index'] : (int) $idx;
 
-                        ProductFinishingLink::query()->create([
-                            'product_id' => $product->id,
-                            'finishing_product_id' => (int) $finishingId,
-                            'pricing_mode' => $mode,
-                            'min_qty' => $min,
-                            'max_qty' => $max,
-                            'is_required' => $isRequired,
-                            'sort_index' => $sortIndex,
-                            'is_active' => true,
-                            'created_by' => $userId,
-                            'updated_by' => $userId,
-                        ]);
+                        $link = $existingByFinishingId->get($finishingId);
+                        if ($link) {
+                            if (method_exists($link, 'trashed') && $link->trashed()) {
+                                $link->restore();
+                            }
+
+                            $link->fill([
+                                'pricing_mode' => $mode,
+                                'min_qty' => $min,
+                                'max_qty' => $max,
+                                'is_required' => $isRequired,
+                                'sort_index' => $sortIndex,
+                                'is_active' => true,
+                                'updated_by' => $userId,
+                            ]);
+                            if (! $link->created_by) {
+                                $link->created_by = $userId;
+                            }
+                            $link->save();
+                        } else {
+                            ProductFinishingLink::query()->create([
+                                'product_id' => $product->id,
+                                'finishing_product_id' => $finishingId,
+                                'pricing_mode' => $mode,
+                                'min_qty' => $min,
+                                'max_qty' => $max,
+                                'is_required' => $isRequired,
+                                'sort_index' => $sortIndex,
+                                'is_active' => true,
+                                'created_by' => $userId,
+                                'updated_by' => $userId,
+                            ]);
+                        }
+                    }
+                }
+
+                // Soft-disable anything not present anymore (ID-stable; avoids unique constraint collisions).
+                $selectedMap = array_flip($finishingIds);
+                foreach ($existingByFinishingId as $fid => $link) {
+                    if (isset($selectedMap[$fid])) {
+                        continue;
+                    }
+
+                    $link->is_active = false;
+                    $link->updated_by = $userId;
+                    $link->save();
+
+                    if (method_exists($link, 'trashed') && ! $link->trashed()) {
+                        $link->delete();
                     }
                 }
             } catch (ValidationException $e) {
@@ -953,6 +1333,9 @@ class ProductController extends Controller
             // Slug safety: if UI sends empty/duplicate, ensure it's normalized.
             $data['slug'] = Str::slug($data['slug'] ?? $data['name'] ?? '');
 
+            $descriptionValue = $data['long_description'] ?? ($data['description'] ?? null);
+            $descriptionColumn = Schema::hasColumn('products', 'long_description') ? 'long_description' : 'description';
+
             DB::beginTransaction();
 
             /** @var \App\Models\Product $product */
@@ -962,7 +1345,7 @@ class ProductController extends Controller
                 'name' => $data['name'],
                 'slug' => $data['slug'],
                 'short_description' => $data['short_description'] ?? null,
-                'description' => $data['description'] ?? null,
+                $descriptionColumn => $descriptionValue,
 
                 'product_type' => $data['product_type'],
                 'visibility' => $data['visibility'],

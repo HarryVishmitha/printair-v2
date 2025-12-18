@@ -119,6 +119,17 @@ Route::prefix('admin')
         Route::put('products/{product}', [ProductController::class, 'update'])
             ->name('products.update');
 
+        // Quick toggles (AJAX)
+        Route::patch('products/{product}/status', [ProductController::class, 'updateStatus'])
+            ->name('products.status');
+
+        Route::patch('products/{product}/visibility', [ProductController::class, 'updateVisibility'])
+            ->name('products.visibility');
+
+        // Delete
+        Route::delete('products/{product}', [ProductController::class, 'destroy'])
+            ->name('products.destroy');
+
         Route::post('products/{product}/wizard/save-draft', [ProductController::class, 'wizardSaveDraft'])
             ->name('products.wizard.saveDraft');
 

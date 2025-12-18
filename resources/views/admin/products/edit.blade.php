@@ -17,6 +17,9 @@
         })"
         x-init="init()"
     >
+        <script>
+            window.__wizardHasImages = @js(count($productPayload['existing_images'] ?? []) > 0);
+        </script>
 
         {{-- Top hero --}}
         <section class="rounded-3xl border border-slate-200/80 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-6 py-6 text-white shadow-lg shadow-slate-900/30">
@@ -142,6 +145,22 @@
                             </div>
                             <p class="mt-1 text-xs text-slate-500">Leave empty to auto-generate from name.</p>
                             @error('slug') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+                        </div>
+
+                        <div class="md:col-span-2">
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Long Description
+                            </label>
+                            <textarea
+                                name="long_description"
+                                x-model="form.long_description"
+                                rows="10"
+                                class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-4 py-3 text-sm font-mono leading-relaxed focus:border-[#ff4b5c] focus:bg-white focus:ring-2 focus:ring-[#ff4b5c]/20"
+                                placeholder="<div class=&quot;space-y-4&quot;>\n  <p class=&quot;text-slate-700&quot;>Write your product description here…</p>\n</div>"></textarea>
+                            <p class="mt-1 text-xs text-slate-500">
+                                Add HTML with Tailwind classes (no editor) — this content will be rendered on the product page.
+                            </p>
+                            @error('long_description') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                         </div>
 
                         <div>
@@ -751,6 +770,64 @@
                         </p>
                     </div>
 
+                    @if (count($productPayload['existing_images'] ?? []) > 0)
+                        <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                            <div class="border-b border-slate-100 bg-slate-50/60 px-6 py-4 flex items-center justify-between">
+                                <div class="text-sm font-bold text-slate-900">Existing Images</div>
+                                <div class="text-xs text-slate-500">These are already saved on the product</div>
+                            </div>
+                            <div class="p-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                                @foreach (($productPayload['existing_images'] ?? []) as $img)
+                                    <div class="rounded-2xl border border-slate-200 overflow-hidden">
+                                        <div class="relative">
+                                            <img src="{{ $img['url'] }}" alt="{{ $img['alt_text'] ?? 'Product image' }}"
+                                                class="h-44 w-full object-cover bg-slate-50">
+                                            @if (!empty($img['is_featured']))
+                                                <span class="absolute top-2 left-2 rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white">
+                                                    Featured
+                                                </span>
+                                            @endif
+                                        </div>
+                                        <div class="p-3 text-xs text-slate-600">
+                                            <div class="font-semibold text-slate-900">#{{ $img['id'] }}</div>
+                                            <div class="mt-1 truncate">{{ $img['path'] }}</div>
+                                        </div>
+                                    </div>
+                                @endforeach
+                            </div>
+                        </div>
+                    @endif
+
+                    @if (count($productPayload['existing_files'] ?? []) > 0)
+                        <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
+                            <div class="border-b border-slate-100 bg-slate-50/60 px-6 py-4 flex items-center justify-between">
+                                <div class="text-sm font-bold text-slate-900">Existing Files</div>
+                                <div class="text-xs text-slate-500">These are already saved on the product</div>
+                            </div>
+                            <div class="p-6">
+                                <div class="divide-y divide-slate-100 rounded-2xl border border-slate-200 overflow-hidden">
+                                    @foreach (($productPayload['existing_files'] ?? []) as $f)
+                                        <div class="flex flex-col gap-1 px-4 py-3 sm:flex-row sm:items-center sm:justify-between">
+                                            <div class="min-w-0">
+                                                <div class="text-sm font-semibold text-slate-900 truncate">{{ $f['label'] }}</div>
+                                                <div class="text-xs text-slate-500 truncate">{{ $f['path'] }}</div>
+                                            </div>
+                                            <div class="flex items-center gap-2">
+                                                <span class="rounded-full bg-slate-100 px-2 py-0.5 text-[10px] font-semibold text-slate-700">
+                                                    {{ strtoupper($f['visibility'] ?? 'internal') }}
+                                                </span>
+                                                <a href="{{ $f['url'] }}" target="_blank"
+                                                    class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-medium text-slate-700 shadow-sm hover:bg-slate-50">
+                                                    View
+                                                </a>
+                                            </div>
+                                        </div>
+                                    @endforeach
+                                </div>
+                            </div>
+                        </div>
+                    @endif
+
                     {{-- IMAGES --}}
                     <div class="rounded-3xl border border-slate-200 bg-white shadow-sm overflow-hidden">
                         <div class="border-b border-slate-100 bg-slate-50/60 px-6 py-4 flex items-center justify-between">
@@ -1154,6 +1231,23 @@
                                         </div>
                                     </div>
                                 </div>
+
+                                <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                    <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                        Description Preview
+                                    </div>
+
+                                    <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 p-4 overflow-x-auto">
+                                        <template x-if="form.long_description && form.long_description.trim().length">
+                                            <div class="text-sm text-slate-800" x-html="form.long_description"></div>
+                                        </template>
+                                        <template x-if="!(form.long_description && form.long_description.trim().length)">
+                                            <div class="text-sm text-slate-500">
+                                                No description added yet. Go back to Step 1 to add it.
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
                             </div>
 
                             {{-- Right: checklist / summary --}}
@@ -1397,6 +1491,7 @@
                     name: old.name ?? base.name ?? '',
                     product_code: old.product_code ?? base.product_code ?? '',
                     slug: old.slug ?? base.slug ?? '',
+                    long_description: old.long_description ?? base.long_description ?? base.description ?? '',
                     category_id: old.category_id ?? base.category_id ?? '',
                     product_type: old.product_type ?? base.product_type ?? 'standard',
                     status: old.status ?? base.status ?? 'active',
@@ -1411,8 +1506,13 @@
                     base_price: old?.pricing?.base_price ?? base?.pricing?.base_price ?? '',
                 },
 
-                options: old?.variants_payload ? (JSON.parse(old.variants_payload)?.options ?? []) : [],
-                variants: old?.variants_payload ? (JSON.parse(old.variants_payload)?.variants ?? []) : [],
+                options: old?.variants_payload
+                    ? (JSON.parse(old.variants_payload)?.options ?? [])
+                    : (base?.variants_payload?.options ?? []),
+
+                variants: old?.variants_payload
+                    ? (JSON.parse(old.variants_payload)?.variants ?? [])
+                    : (base?.variants_payload?.variants ?? []),
 
                 seo: {
                     seo_title: old?.seo?.seo_title ?? base?.seo?.seo_title ?? '',
@@ -1595,6 +1695,7 @@
                 },
 
                 syncGroupSlug(g) {
+                    if (this.isDbId(g?.id)) return;
                     g.slug = this.slugify(g.name);
                 },
 
@@ -1612,6 +1713,7 @@
                 },
 
                 syncValueSlug(group, v) {
+                    if (this.isDbId(v?.id)) return;
                     v.slug = this.slugify(v.label);
                 },
 
@@ -1665,6 +1767,11 @@
                     });
                 },
 
+                isDbId(v) {
+                    if (v === null || v === undefined) return false;
+                    return /^\d+$/.test(String(v));
+                },
+
                 enableAllVariants() {
                     this.variants = (this.variants || []).map(v => ({ ...v, enabled: true }));
                 },
@@ -1676,18 +1783,25 @@
                 variantsPayload() {
                     // This is what backend receives.
                     return {
-                        options: (this.options || []).map(g => ({
+                        options: (this.options || []).map((g, gi) => ({
+                            id: this.isDbId(g?.id) ? Number(g.id) : null,
                             name: g.name,
                             slug: this.slugify(g.slug || g.name),
-                            values: (g.values || []).map(v => ({
+                            sort_order: g?.sort_order ?? (gi + 1),
+                            is_active: true,
+                            values: (g.values || []).map((v, vi) => ({
+                                id: this.isDbId(v?.id) ? Number(v.id) : null,
                                 label: v.label,
                                 slug: this.slugify(v.slug || v.label),
+                                sort_order: v?.sort_order ?? (vi + 1),
+                                is_active: (typeof v?.is_active === 'boolean') ? v.is_active : true,
                             })).filter(v => v.slug.length > 0),
                         })).filter(g => g.slug && g.values.length > 0),
 
                         variants: (this.variants || [])
                             .filter(v => v.enabled)
                             .map(v => ({
+                                id: this.isDbId(v?.id) ? Number(v.id) : null,
                                 key: v.key,
                                 label: v.label,
                                 price: v.price ?? null,

@@ -39,6 +39,8 @@ class UpdateProductRequest extends FormRequest
             'slug' => ['required', 'string', 'max:220', Rule::unique('products', 'slug')->ignore($product->id)],
 
             'short_description' => ['nullable', 'string', 'max:255'],
+            'long_description' => ['nullable', 'string'],
+            // Backward-compat for older forms/clients.
             'description' => ['nullable', 'string'],
 
             'product_type' => ['required', Rule::in(['standard','dimension_based','finishing','service'])],
@@ -148,4 +150,3 @@ class UpdateProductRequest extends FormRequest
         }
     }
 }
-

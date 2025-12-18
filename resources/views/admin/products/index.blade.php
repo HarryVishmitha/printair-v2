@@ -136,6 +136,46 @@
             </div>
         </section>
 
+        @php
+            $csrf = csrf_token();
+        @endphp
+
+        <script>
+            function productIndexActions(csrf) {
+                return {
+                    saving: false,
+                    async patch(url, payload) {
+                        this.saving = true;
+                        try {
+                            const res = await fetch(url, {
+                                method: 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'Accept': 'application/json',
+                                    'X-CSRF-TOKEN': csrf,
+                                },
+                                body: JSON.stringify(payload),
+                            });
+
+                            const data = await res.json().catch(() => ({}));
+
+                            if (!res.ok) {
+                                const msg =
+                                    data?.message ||
+                                    (data?.errors ? Object.values(data.errors).flat().join('\n') : null) ||
+                                    'Update failed';
+                                throw new Error(msg);
+                            }
+
+                            return data;
+                        } finally {
+                            this.saving = false;
+                        }
+                    },
+                }
+            }
+        </script>
+
         {{-- SEARCH & FILTER STRIP --}}
         <section class="rounded-3xl border border-slate-200/80 bg-white px-5 py-5 shadow-sm sm:px-6">
             <form method="GET" action="{{ route('admin.products.index') }}"
@@ -257,7 +297,7 @@
         </section>
 
         {{-- MAIN TABLE CARD --}}
-        <section class="rounded-3xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
+        <section x-data="productIndexActions('{{ $csrf }}')" class="rounded-3xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
             @if ($products->count() === 0 && !$hasAnyFilter)
                 {{-- Empty state --}}
                 <div class="px-6 py-16 text-center">
@@ -386,18 +426,6 @@
                                                     <span class="text-sm font-semibold text-slate-900">
                                                         {{ $p->name }}
                                                     </span>
-
-                                                    <span
-                                                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 {{ $statusColor }}">
-                                                        <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-                                                        {{ ucfirst($p->status) }}
-                                                    </span>
-
-                                                    <span
-                                                        class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 {{ $visibilityColor }}">
-                                                        <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-                                                        {{ ucfirst($p->visibility) }}
-                                                    </span>
                                                 </div>
 
                                                 <div class="mt-1 text-[11px] text-slate-500">
@@ -427,20 +455,35 @@
 
                                     {{-- VISIBILITY --}}
                                     <td class="px-4 py-4 align-top whitespace-nowrap">
-                                        <span
-                                            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 {{ $visibilityColor }}">
-                                            <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-                                            {{ ucfirst($p->visibility) }}
-                                        </span>
+                                        <select
+                                            class="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700 shadow-sm hover:border-slate-300 focus:border-[#ff4b5c] focus:ring-2 focus:ring-[#ff4b5c]/20 disabled:opacity-60"
+                                            :disabled="saving"
+                                            @change="
+                                                patch('{{ route('admin.products.visibility', $p) }}', { visibility: $event.target.value })
+                                                    .then(() => window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', msg: 'Visibility updated' } })))
+                                                    .catch(e => { $event.target.value = '{{ $p->visibility }}'; alert(e.message); });
+                                            "
+                                        >
+                                            <option value="public" @selected($p->visibility === 'public')>Public</option>
+                                            <option value="internal" @selected($p->visibility === 'internal')>Internal</option>
+                                        </select>
                                     </td>
 
                                     {{-- STATUS --}}
                                     <td class="px-4 py-4 align-top whitespace-nowrap">
-                                        <span
-                                            class="inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide ring-1 {{ $statusColor }}">
-                                            <span class="h-1.5 w-1.5 rounded-full bg-current"></span>
-                                            {{ ucfirst($p->status) }}
-                                        </span>
+                                        <select
+                                            class="rounded-xl border border-slate-200 bg-white px-2.5 py-1.5 text-[11px] font-semibold uppercase tracking-wide text-slate-700 shadow-sm hover:border-slate-300 focus:border-[#ff4b5c] focus:ring-2 focus:ring-[#ff4b5c]/20 disabled:opacity-60"
+                                            :disabled="saving"
+                                            @change="
+                                                patch('{{ route('admin.products.status', $p) }}', { status: $event.target.value })
+                                                    .then(() => window.dispatchEvent(new CustomEvent('toast', { detail: { type: 'success', msg: 'Status updated' } })))
+                                                    .catch(e => { $event.target.value = '{{ $p->status }}'; alert(e.message); });
+                                            "
+                                        >
+                                            @foreach (['active' => 'Active', 'inactive' => 'Inactive', 'draft' => 'Draft'] as $k => $v)
+                                                <option value="{{ $k }}" @selected($p->status === $k)>{{ $v }}</option>
+                                            @endforeach
+                                        </select>
                                     </td>
 
                                     {{-- UPDATED --}}
@@ -473,6 +516,25 @@
                                                 </a>
                                             @endif
 
+                                            @if (Route::has('admin.products.destroy'))
+                                                <button
+                                                    type="button"
+                                                    @click="
+                                                        $dispatch('open-delete', {
+                                                            id: {{ $p->id }},
+                                                            name: @js($p->name),
+                                                            action: @js(route('admin.products.destroy', $p))
+                                                        })
+                                                    "
+                                                    class="inline-flex items-center gap-1.5 rounded-xl border border-rose-200 bg-rose-50 px-3 py-1.5 text-[11px] font-medium text-rose-700 shadow-sm hover:bg-rose-100 hover:border-rose-300"
+                                                >
+                                                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M6 7h12m-9 0V5a1 1 0 011-1h4a1 1 0 011 1v2m-1 0v14a2 2 0 01-2 2H8a2 2 0 01-2-2V7m3 4v8m4-8v8" />
+                                                    </svg>
+                                                    Delete
+                                                </button>
+                                            @endif
+
                                             @if (!Route::has('admin.products.edit') && !Route::has('admin.products.pricing.index'))
                                                 <span class="text-[11px] text-slate-400">—</span>
                                             @endif
@@ -502,5 +564,55 @@
                 </div>
             @endif
         </section>
+    </div>
+
+    <div
+        x-data="{ open:false, name:'', action:'' }"
+        x-on:open-delete.window="
+            open = true;
+            name = $event.detail.name;
+            action = $event.detail.action;
+        "
+        x-show="open"
+        x-transition.opacity
+        class="fixed inset-0 z-[9999] flex items-center justify-center"
+        style="display:none;"
+    >
+        <div class="absolute inset-0 bg-black/60" @click="open=false"></div>
+
+        <div class="relative w-full max-w-md rounded-2xl bg-white p-6 shadow-xl">
+            <div class="flex items-start gap-3">
+                <div class="flex h-10 w-10 items-center justify-center rounded-xl bg-rose-50 text-rose-600">
+                    <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke-width="2.2" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round"
+                            d="M12 9v3.75m0 3h.008v.008H12V15.75zm9-.75a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                </div>
+
+                <div class="flex-1">
+                    <h3 class="text-sm font-semibold text-slate-900">Delete product</h3>
+                    <p class="mt-1 text-sm text-slate-600">
+                        This will remove <span class="font-semibold" x-text="name"></span> from the catalog.
+                        This action can be reversed only if you use soft deletes.
+                    </p>
+                </div>
+            </div>
+
+            <div class="mt-6 flex items-center justify-end gap-2">
+                <button type="button" @click="open=false"
+                    class="rounded-xl border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50">
+                    Cancel
+                </button>
+
+                <form method="POST" :action="action">
+                    @csrf
+                    @method('DELETE')
+                    <button type="submit"
+                        class="rounded-xl bg-rose-600 px-4 py-2 text-sm font-semibold text-white hover:bg-rose-700">
+                        Yes, delete
+                    </button>
+                </form>
+            </div>
+        </div>
     </div>
 </x-app-layout>
