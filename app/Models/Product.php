@@ -135,6 +135,11 @@ class Product extends Model
         return $this->hasMany(ProductPricing::class);
     }
 
+    public function workingGroupOverrides(): HasMany
+    {
+        return $this->hasMany(ProductWorkingGroupOverride::class);
+    }
+
     public function publicPricing(): HasOne
     {
         return $this->hasOne(ProductPricing::class)

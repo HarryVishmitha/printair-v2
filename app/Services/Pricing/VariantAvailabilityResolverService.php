@@ -30,9 +30,17 @@ class VariantAvailabilityResolverService
                 return true;
             }
 
-            $row = DB::table('product_variant_availability_overrides')
-                ->whereNull('deleted_at')
+            // Defensive: ensure this variant set belongs to the product
+            $belongs = DB::table('product_variant_sets')
+                ->where('id', $variantSetId)
                 ->where('product_id', $product->id)
+                ->exists();
+
+            if (! $belongs) {
+                return false;
+            }
+
+            $row = DB::table('product_variant_availability_overrides')
                 ->where('variant_set_id', $variantSetId)
                 ->where('working_group_id', $wgId)
                 ->select('is_enabled')
@@ -75,9 +83,18 @@ class VariantAvailabilityResolverService
                 return $variantSetIds;
             }
 
-            $disabledIds = DB::table('product_variant_availability_overrides')
-                ->whereNull('deleted_at')
+            $variantSetIds = DB::table('product_variant_sets')
                 ->where('product_id', $product->id)
+                ->whereIn('id', $variantSetIds)
+                ->pluck('id')
+                ->map(fn ($id) => (int) $id)
+                ->all();
+
+            if (empty($variantSetIds)) {
+                return [];
+            }
+
+            $disabledIds = DB::table('product_variant_availability_overrides')
                 ->where('working_group_id', $wgId)
                 ->whereIn('variant_set_id', $variantSetIds)
                 ->where('is_enabled', 0)
@@ -126,8 +143,6 @@ class VariantAvailabilityResolverService
             }
 
             $rows = DB::table('product_variant_availability_overrides')
-                ->whereNull('deleted_at')
-                ->where('product_id', $product->id)
                 ->where('working_group_id', $wgId)
                 ->whereIn('variant_set_id', $variantSetIds)
                 ->select('variant_set_id', 'is_enabled')
@@ -149,4 +164,3 @@ class VariantAvailabilityResolverService
         }
     }
 }
-

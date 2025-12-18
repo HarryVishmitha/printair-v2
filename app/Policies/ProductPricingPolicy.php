@@ -13,9 +13,10 @@ class ProductPricingPolicy
         try {
             // Viewing pricing tables is still sensitive (profit margins etc.)
             // Keep admin-only by default.
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@viewAny', $user, null, $e);
+
             return false;
         }
     }
@@ -23,9 +24,10 @@ class ProductPricingPolicy
     public function view(User $user, ProductPricing $pricing): bool
     {
         try {
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@view', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -34,9 +36,10 @@ class ProductPricingPolicy
     {
         try {
             // Creating public / WG price lists
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@create', $user, null, $e);
+
             return false;
         }
     }
@@ -45,9 +48,10 @@ class ProductPricingPolicy
     {
         try {
             // Any pricing update is admin-only
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@update', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -56,9 +60,10 @@ class ProductPricingPolicy
     {
         try {
             // Soft delete only; keep audit history
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@delete', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -66,9 +71,10 @@ class ProductPricingPolicy
     public function restore(User $user, ProductPricing $pricing): bool
     {
         try {
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@restore', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -76,14 +82,14 @@ class ProductPricingPolicy
     /**
      * Advanced, future-proof abilities you will 100% need.
      */
-
     public function manageWorkingGroupOverrides(User $user): bool
     {
         try {
             // WG overrides can affect special clients pricing => admin-only
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@manageWorkingGroupOverrides', $user, null, $e);
+
             return false;
         }
     }
@@ -95,6 +101,7 @@ class ProductPricingPolicy
             return $this->isAdmin($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@manageVariantPricing', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -103,9 +110,10 @@ class ProductPricingPolicy
     {
         try {
             // Controls finishing add-ons money
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@manageFinishingPricing', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -122,9 +130,10 @@ class ProductPricingPolicy
         try {
             // Optional: "publish pricing" action in UI
             // Keep strict: publishing impacts live calculations
-            return $this->isAdmin($user);
+            return $this->isStaff($user);
         } catch (\Throwable $e) {
             $this->logPolicyError('ProductPricingPolicy@publish', $user, $pricing, $e);
+
             return false;
         }
     }
@@ -156,5 +165,25 @@ class ProductPricingPolicy
             'working_group_id' => $pricing?->working_group_id,
             'error' => $e->getMessage(),
         ]);
+    }
+
+    private function isStaff(User $user): bool
+    {
+        // Defensive: role relationship might not be loaded; handle safely
+        $role = $user->relationLoaded('role') ? $user->role : $user->role()->first();
+
+        if (! $role) {
+            return false;
+        }
+
+        // Your roles table includes is_staff boolean
+        if ((bool) ($role->is_staff ?? false) === true) {
+            return true;
+        }
+
+        // Fallback by name (future proof if is_staff is misconfigured)
+        $name = strtolower((string) ($role->name ?? ''));
+
+        return in_array($name, ['admin', 'super_admin', 'staff', 'manager'], true);
     }
 }

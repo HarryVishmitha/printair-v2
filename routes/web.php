@@ -1,13 +1,14 @@
 <?php
 
+use App\Http\Controllers\Admin\CategoryController;
+use App\Http\Controllers\Admin\AdminPricingController;
+use App\Http\Controllers\Admin\ProductController;
+use App\Http\Controllers\Admin\UserCustomerController;
+use App\Http\Controllers\Admin\WorkingGroupController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
-use App\Http\Controllers\Admin\WorkingGroupController;
-use App\Http\Controllers\Admin\UserCustomerController;
-use App\Http\Controllers\Admin\CategoryController;
-use \App\Http\Controllers\Admin\ProductController;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/home', [HomeController::class, 'index'])->name('home');
@@ -90,7 +91,7 @@ Route::prefix('admin')
         Route::delete('customers/{customer}', [UserCustomerController::class, 'customersDestroy'])->name('customers.destroy');
     });
 
-//Category Management Routes
+// Category Management Routes
 Route::prefix('admin')
     ->name('admin.')
     ->middleware(['auth', 'verified', 'can:manage-categories'])
@@ -103,7 +104,7 @@ Route::prefix('admin')
         Route::delete('categories/{category}/delete', [CategoryController::class, 'destroy'])->name('categories.destroy');
     });
 
-//Admin Product Management routes
+// Admin Product Management routes
 Route::prefix('admin')
     ->name('admin.')
     ->middleware(['auth', 'verified', 'can:manage-products'])
@@ -149,10 +150,52 @@ Route::prefix('admin')
             Route::patch('{product}/media/files/{file}', [ProductController::class, 'updateFile'])->name('media.files.update');
             Route::delete('{product}/media/files/{file}', [ProductController::class, 'deleteFile'])->name('media.files.delete');
         });
+
+        // Pricing dashboard + editor
+        Route::get('/pricing', [AdminPricingController::class, 'index'])
+            ->name('pricing.index');
+
+        Route::get('/pricing/products/{product}', [AdminPricingController::class, 'show'])
+            ->name('pricing.products.show');
+
+        Route::patch('/pricing/products/{product}/working-groups/{workingGroup}/visibility', [AdminPricingController::class, 'toggleWorkingGroupVisibility'])
+            ->name('pricing.products.wg.visibility');
+
+        Route::patch('/pricing/products/{product}/working-groups/{workingGroup}/override', [AdminPricingController::class, 'toggleWorkingGroupOverride'])
+            ->name('pricing.products.wg.override');
+
+        Route::post('/pricing/products/{product}/public/ensure', [AdminPricingController::class, 'ensurePublicPricing'])
+            ->name('pricing.products.public.ensure');
+
+        Route::post('/pricing/products/{product}/working-groups/{workingGroup}/ensure', [AdminPricingController::class, 'ensureWorkingGroupPricing'])
+            ->name('pricing.products.wg.ensure');
+
+        Route::patch('/pricing/products/{product}/base', [AdminPricingController::class, 'upsertBasePricing'])
+            ->name('pricing.products.base');
+
+        Route::patch('/pricing/products/{product}/tiers', [AdminPricingController::class, 'syncTiers'])
+            ->name('pricing.products.tiers.sync');
+
+        Route::delete('/pricing/products/{product}/tiers/{tier}', [AdminPricingController::class, 'deleteTier'])
+            ->name('pricing.products.tiers.delete');
+
+        Route::patch('/pricing/products/{product}/variant-sets/{variantSet}/availability', [AdminPricingController::class, 'toggleVariantSetAvailability'])
+            ->name('pricing.products.variants.availability');
+
+        Route::patch('/pricing/products/{product}/variants/pricing', [AdminPricingController::class, 'syncVariantPricing'])
+            ->name('pricing.products.variants.pricing');
+
+        Route::patch('/pricing/products/{product}/finishings/pricing', [AdminPricingController::class, 'syncFinishingPricing'])
+            ->name('pricing.products.finishings.pricing');
+
+        Route::delete('/pricing/products/{product}/finishings/pricing/{finishingPricing}', [AdminPricingController::class, 'deleteFinishingPricing'])
+            ->name('pricing.products.finishings.delete');
+
+        Route::patch('/pricing/products/{product}/rolls/pricing', [AdminPricingController::class, 'syncRollPricing'])
+            ->name('pricing.products.rolls.pricing');
     });
 
-
-//Admin Roll Management routes
+// Admin Roll Management routes
 Route::prefix('admin')
     ->name('admin.')
     ->middleware(['auth', 'verified', 'can:manage-rolls'])
@@ -164,7 +207,6 @@ Route::prefix('admin')
         Route::patch('rolls/{roll}/update', [\App\Http\Controllers\Admin\RollController::class, 'update'])->name('rolls.update');
         Route::delete('rolls/{roll}/delete', [\App\Http\Controllers\Admin\RollController::class, 'destroy'])->name('rolls.destroy');
     });
-
 
 Route::middleware('auth')->group(function () {
     // List pages

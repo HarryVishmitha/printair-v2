@@ -93,6 +93,13 @@
                     'visible' => $user?->can('manage-products') ?? false,
                 ],
                 [
+                    'label' => 'Product Pricing Hub',
+                    'icon' => 'solar:box-bold-duotone',
+                    'route' => route('admin.pricing.index'), // change route name if needed
+                    'active' => request()->routeIs('admin.pricing.*'),
+                    'visible' => $user?->can('manage-products') ?? false,
+                ],
+                [
                     'label' => 'Clients',
                     'icon' => 'solar:users-group-two-rounded-bold-duotone',
                     'route' => '#', // change route name if needed

@@ -396,18 +396,27 @@ class ProductController extends Controller
                 $hasPrice = $price !== null && $price !== '' && is_numeric($price);
 
                 if ($hasPrice) {
-                    ProductVariantPricing::query()->updateOrCreate(
-                        ['product_pricing_id' => $pricingRow->id, 'variant_set_id' => $set->id],
-                        [
-                            'fixed_price' => (float) $price,
-                            'rate_per_sqft' => null,
-                            'offcut_rate_per_sqft' => null,
-                            'min_charge' => null,
-                            'is_active' => true,
-                            'updated_by' => $userId,
-                            'created_by' => $userId,
-                        ]
-                    );
+                    // IMPORTANT: product_variant_pricings has a UNIQUE index on (product_pricing_id, variant_set_id)
+                    // that does NOT include deleted_at, so soft-deleted rows must be restored (not re-inserted).
+                    $vp = ProductVariantPricing::withTrashed()->firstOrNew([
+                        'product_pricing_id' => $pricingRow->id,
+                        'variant_set_id' => $set->id,
+                    ]);
+
+                    if ($vp->trashed()) {
+                        $vp->restore();
+                    }
+
+                    $vp->fixed_price = (float) $price;
+                    $vp->rate_per_sqft = null;
+                    $vp->offcut_rate_per_sqft = null;
+                    $vp->min_charge = null;
+                    $vp->is_active = true;
+                    $vp->updated_by = $userId;
+                    if (! $vp->exists) {
+                        $vp->created_by = $userId;
+                    }
+                    $vp->save();
                 } else {
                     ProductVariantPricing::query()
                         ->where('product_pricing_id', $pricingRow->id)
