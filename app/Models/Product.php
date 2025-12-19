@@ -16,6 +16,14 @@ class Product extends Model
 {
     use SoftDeletes;
 
+    protected static function booted(): void
+    {
+        static::saved(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+        static::deleted(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+        static::restored(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+        static::forceDeleted(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+    }
+
     protected $guarded = ['id'];
 
     protected $casts = [

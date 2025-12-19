@@ -47,4 +47,10 @@ return [
         'redirect'      => env('FACEBOOK_REDIRECT_URI'),
     ],
 
+    'analytics' => [
+        'enabled' => env('ANALYTICS_ENABLED', true),
+        'ga4_measurement_id' => env('GA4_MEASUREMENT_ID'),
+        'meta_pixel_id' => env('META_PIXEL_ID'),
+    ],
+
 ];

@@ -2121,22 +2121,20 @@ class ProductController extends Controller
         $isFirst = $product->images()->count() === 0;
 
         $img = $product->images()->create([
-            'disk' => $disk,
             'path' => $path,
-            'original_name' => $file->getClientOriginalName(),
-            'mime' => $file->getMimeType(),
-            'size_bytes' => $file->getSize(),
             'alt_text' => $data['alt_text'] ?? null,
+            'role' => 'gallery',
             'sort_index' => $this->nextSortIndex($product->images()),
             'is_featured' => $isFirst ? 1 : 0,
-            'meta' => null,
+            'created_by' => Auth::user()?->id,
+            'updated_by' => Auth::user()?->id,
         ]);
 
         return response()->json([
             'ok' => true,
             'image' => [
                 'id' => $img->id,
-                'url' => Storage::url($path),
+                'url' => Storage::disk($disk)->url($path),
                 'is_featured' => (bool) $img->is_featured,
                 'alt_text' => $img->alt_text,
             ],
@@ -2149,15 +2147,14 @@ class ProductController extends Controller
 
         abort_unless($image->product_id === $product->id, 404);
 
-        $disk = $image->disk ?: $this->mediaDisk();
         $path = $image->path;
 
         $wasFeatured = (bool) $image->is_featured;
 
         $image->delete();
 
-        if ($path && Storage::disk($disk)->exists($path)) {
-            Storage::disk($disk)->delete($path);
+        if ($path && Storage::disk($this->mediaDisk())->exists($path)) {
+            Storage::disk($this->mediaDisk())->delete($path);
         }
 
         if ($wasFeatured) {

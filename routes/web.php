@@ -6,6 +6,7 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\UserCustomerController;
 use App\Http\Controllers\Admin\WorkingGroupController;
 use App\Http\Controllers\HomeController;
+use App\Http\Controllers\ContactController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -15,6 +16,28 @@ Route::get('/home', [HomeController::class, 'index'])->name('home');
 Route::get('/about-us', [HomeController::class, 'about'])->name('about');
 Route::get('/terms-and-conditions', [HomeController::class, 'terms'])->name('terms');
 Route::get('/privacy-policy', [HomeController::class, 'privacy'])->name('privacy');
+Route::get('/terms-and-conditions', [HomeController::class, 'termsAndConditions'])->name('terms.conditions');
+Route::get('/contact', [HomeController::class, 'contact'])->name('contact');
+
+// #############################
+// Public Navigation Routes
+// #############################
+Route::get('/products', [HomeController::class, 'products'])->name('products.index');
+Route::get('/services', [HomeController::class, 'services'])->name('services.index');
+Route::get('/pricing', [HomeController::class, 'pricing'])->name('pricing.index');
+Route::get('/contact', [HomeController::class, 'contact'])->name('contact');
+Route::post('/contact', [ContactController::class, 'submit'])
+    ->name('contact.submit')
+    ->middleware(['throttle:10,1']);
+Route::get('/quote', [HomeController::class, 'quote'])->name('quotes');
+Route::get('/quote/create', [HomeController::class, 'quote'])->name('quotes.create');
+
+// AJAX routes
+Route::get('/ajax/home/categories', [HomeController::class, 'categories'])
+    ->name('ajax.home.categories');
+
+Route::get('/ajax/home/popular-products', [HomeController::class, 'popularProducts'])
+    ->name('ajax.home.popular-products');
 
 // Social Login
 // #############################

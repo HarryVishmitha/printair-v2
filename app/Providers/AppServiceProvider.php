@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use Illuminate\Filesystem\Filesystem;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
 use App\Models\User;
@@ -21,6 +22,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        // Prevent sporadic Blade compilation failures when `storage/framework/*` folders are missing.
+        $fs = $this->app->make(Filesystem::class);
+        $fs->ensureDirectoryExists(storage_path('framework/views'));
+        $fs->ensureDirectoryExists(storage_path('framework/cache/data'));
+        $fs->ensureDirectoryExists(storage_path('framework/sessions'));
+
         \Illuminate\Support\Facades\Event::subscribe(\App\Listeners\UserLoginSubscriber::class);
 
         /**

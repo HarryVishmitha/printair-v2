@@ -41,10 +41,9 @@
 
     {{-- Fonts / Icons / Alpine --}}
     <link rel="preconnect" href="https://fonts.bunny.net">
-    <link href="https://fonts.bunny.net/css?family=be-vietnam-pro:400,500,600,700&display=swap" rel="stylesheet" />
+    <link href="https://fonts.bunny.net/css?family=be-vietnam-pro:400,500,600,700,800,900&display=swap"
+        rel="stylesheet" />
     <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
-    <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-
     {{-- App assets --}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 
@@ -159,6 +158,84 @@
                 </p>
             </div>
         </footer>
+
+        <div x-data="cookieConsent()" x-init="init()" x-show="visible" x-transition.opacity
+            class="fixed bottom-5 right-5 z-[9999] w-[92%] max-w-sm sm:w-full">
+            <div class="rounded-3xl border border-slate-200 bg-white p-6 shadow-xl shadow-slate-900/10">
+                <div class="flex items-start gap-3">
+                    {{-- Icon --}}
+                    <div
+                        class="flex h-10 w-10 shrink-0 items-center justify-center rounded-2xl bg-slate-900 text-white">
+                        🍪
+                    </div>
+
+                    <div class="flex-1">
+                        <h3 class="text-sm font-extrabold text-slate-900">
+                            Cookies & Privacy
+                        </h3>
+
+                        <p class="mt-1 text-xs leading-relaxed text-slate-600">
+                            We use cookies to ensure site security, improve performance, and understand usage.
+                            No personal data is sold or shared.
+                        </p>
+
+                        <p class="mt-2 text-xs text-slate-500">
+                            Learn more in our
+                            <a href="{{ route('privacy') }}"
+                                class="font-semibold text-slate-900 underline underline-offset-2 hover:text-slate-700">
+                                Privacy Policy
+                            </a>.
+                        </p>
+                    </div>
+                </div>
+
+                {{-- Actions --}}
+                <div class="mt-5 flex items-center justify-end gap-3">
+                    <button @click="reject()"
+                        class="rounded-xl border border-slate-200 px-4 py-2 text-xs font-semibold text-slate-600 hover:bg-slate-50">
+                        Reject
+                    </button>
+
+                    <button @click="accept()"
+                        class="rounded-xl bg-slate-900 px-4 py-2 text-xs font-semibold text-white hover:bg-slate-800">
+                        Accept
+                    </button>
+                </div>
+            </div>
+        </div>
+
+        <script>
+            function cookieConsent() {
+                return {
+                    visible: false,
+
+                    init() {
+                        const consent = localStorage.getItem('printair_cookie_consent');
+                        if (!consent) {
+                            this.visible = true;
+                        }
+                    },
+
+                    accept() {
+                        localStorage.setItem('printair_cookie_consent', 'accepted');
+                        this.visible = false;
+
+                        // Tell the site to load analytics now
+                        window.dispatchEvent(new Event('printair:cookies-accepted'));
+                    },
+
+
+                    reject() {
+                        localStorage.setItem('printair_cookie_consent', 'rejected');
+                        this.visible = false;
+                        window.dispatchEvent(new Event('printair:cookies-rejected'));
+                    }
+
+                }
+            }
+        </script>
+
+        <x-analytics-loader />
     </div>
 </body>
 

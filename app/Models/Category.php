@@ -3,11 +3,20 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Category extends Model
 {
     use SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::saved(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+        static::deleted(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+        static::restored(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+        static::forceDeleted(static fn () => \App\Services\Public\NavbarDataService::bustCache());
+    }
 
     protected $fillable = [
         'working_group_id',
@@ -53,6 +62,11 @@ class Category extends Model
     public function children()
     {
         return $this->hasMany(self::class, 'parent_id')->orderBy('sort_order');
+    }
+
+    public function products(): HasMany
+    {
+        return $this->hasMany(Product::class, 'category_id');
     }
 
     public function workingGroup()
