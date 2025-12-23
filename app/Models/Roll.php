@@ -46,7 +46,7 @@ class Roll extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        // Qualify column to avoid ambiguity when joined via product_rolls pivot.
+        return $query->where($this->getTable().'.is_active', true);
     }
 }
-

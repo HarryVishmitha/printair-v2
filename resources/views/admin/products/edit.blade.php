@@ -254,24 +254,40 @@
                                 <p class="mt-1 text-sm text-slate-600">
                                     You’ll set base rate/offcut in Product Pricing first, and optionally override per roll later.
                                 </p>
-                                <div class="mt-4 grid gap-4 md:grid-cols-2">
-                                    <div>
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                            Base Rate per Sqft
-                                        </label>
-                                        <input type="number" step="0.01" name="pricing[rate_per_sqft]" x-model="pricing.rate_per_sqft"
-                                            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm">
-                                    </div>
-                                    <div>
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                            Offcut Rate per Sqft
-                                        </label>
-                                        <input type="number" step="0.01" name="pricing[offcut_per_sqft]" x-model="pricing.offcut_per_sqft"
-                                            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm">
-                                    </div>
-                                </div>
-                            </div>
-                        </template>
+	                                <div class="mt-4 grid gap-4 md:grid-cols-2">
+	                                    <div>
+	                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+	                                            Base Rate per Sqft
+	                                        </label>
+	                                        <input type="number" step="0.01" name="pricing[rate_per_sqft]" x-model="pricing.rate_per_sqft"
+	                                            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm">
+	                                    </div>
+	                                    <div>
+	                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+	                                            Offcut Rate per Sqft
+	                                        </label>
+	                                        <input type="number" step="0.01" name="pricing[offcut_per_sqft]" x-model="pricing.offcut_per_sqft"
+	                                            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-2.5 text-sm">
+	                                    </div>
+	                                    <div class="md:col-span-2">
+	                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+	                                            Allow Rotation to Fit Roll
+	                                        </label>
+	                                        <label class="flex items-center justify-between gap-4 rounded-2xl border border-slate-200 bg-white px-4 py-3">
+	                                            <div class="min-w-0">
+	                                                <div class="text-sm font-semibold text-slate-900">Allow rotation</div>
+	                                                <div class="mt-0.5 text-xs text-slate-500">
+	                                                    If enabled, the system can swap width/height to fit available roll widths.
+	                                                </div>
+	                                            </div>
+	                                            <input type="checkbox" name="allow_rotation_to_fit_roll" value="1"
+	                                                class="h-5 w-5 rounded accent-slate-900"
+	                                                x-model="form.allow_rotation_to_fit_roll">
+	                                        </label>
+	                                    </div>
+	                                </div>
+	                            </div>
+	                        </template>
 
                         <template x-if="form.product_type === 'service'">
                             <div class="md:col-span-2 rounded-2xl border border-amber-200 bg-amber-50 p-4">
@@ -1496,6 +1512,9 @@
                     product_type: old.product_type ?? base.product_type ?? 'standard',
                     status: old.status ?? base.status ?? 'active',
                     visibility: old.visibility ?? base.visibility ?? 'public',
+                    allow_rotation_to_fit_roll: (old.allow_rotation_to_fit_roll !== undefined)
+                        ? Boolean(Number(old.allow_rotation_to_fit_roll))
+                        : (base.allow_rotation_to_fit_roll ?? true),
                 },
 
                 pricing: {
@@ -1555,6 +1574,9 @@
                     this.$watch('form.product_type', (t) => {
                         if (t === 'finishing') {
                             this.form.visibility = 'internal';
+                        }
+                        if (t === 'dimension_based' && this.form.allow_rotation_to_fit_roll === undefined) {
+                            this.form.allow_rotation_to_fit_roll = true;
                         }
                     });
 

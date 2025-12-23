@@ -92,7 +92,9 @@ class ProductPricing extends Model
 
     public function rollPricings(): HasMany
     {
-        return $this->hasMany(ProductRollPricing::class, 'product_pricing_id');
+        return $this->hasMany(ProductRollPricing::class, 'product_pricing_id')
+            ->whereNull('deleted_at')
+            ->orderBy('id');
     }
 
     /*

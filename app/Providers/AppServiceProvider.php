@@ -2,9 +2,12 @@
 
 namespace App\Providers;
 
+use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Filesystem\Filesystem;
+use Illuminate\Http\Request;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\RateLimiter;
 use App\Models\User;
 
 class AppServiceProvider extends ServiceProvider
@@ -22,6 +25,12 @@ class AppServiceProvider extends ServiceProvider
      */
     public function boot(): void
     {
+        RateLimiter::for('contact', function (Request $request) {
+            $key = 'contact:'.($request->ip() ?? 'ip').':'.substr((string) $request->input('email'), 0, 120);
+
+            return Limit::perMinutes(10, 5)->by($key);
+        });
+
         // Prevent sporadic Blade compilation failures when `storage/framework/*` folders are missing.
         $fs = $this->app->make(Filesystem::class);
         $fs->ensureDirectoryExists(storage_path('framework/views'));

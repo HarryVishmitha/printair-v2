@@ -104,7 +104,7 @@
                             Ask for Quote
                         </a>
 
-                        <a href="#"
+                        <a href="{{ route('products.index') }}"
                             class="group inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-semibold text-white transition hover:bg-slate-800 sm:w-auto">
                             <iconify-icon icon="solar:cart-large-2-bold" class="text-lg"></iconify-icon>
                             Explore Products
@@ -1095,13 +1095,13 @@
 
             {{-- Micro CTA --}}
             <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-                <a href="#"
+                <a href="{{ route('quotes.create') }}"
                     class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-6 py-3 text-sm font-bold text-white shadow-sm shadow-red-500/20 transition hover:bg-red-600 sm:w-auto">
                     <iconify-icon icon="solar:magic-stick-3-bold" class="text-lg"></iconify-icon>
                     Start Designing
                 </a>
 
-                <a href="#"
+                <a href="{{ route('quotes.create') }}"
                     class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-bold text-slate-900 transition hover:bg-slate-50 sm:w-auto">
                     <iconify-icon icon="solar:document-add-bold" class="text-lg text-red-500"></iconify-icon>
                     Ask for Quote
@@ -1284,13 +1284,13 @@
 
             {{-- CTA --}}
             <div class="mt-10 flex flex-col items-center justify-center gap-3 sm:flex-row sm:gap-4">
-                <a href="#"
+                <a href="{{ route('quotes.create') }}"
                     class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-red-500 px-6 py-3 text-sm font-bold text-white shadow-sm shadow-red-500/20 transition hover:bg-red-600 sm:w-auto">
                     <iconify-icon icon="solar:document-add-bold" class="text-lg"></iconify-icon>
                     Ask for Quote
                 </a>
 
-                <a href="#"
+                <a href="{{ route('products.index') }}"
                     class="inline-flex w-full items-center justify-center gap-2 rounded-xl bg-slate-900 px-6 py-3 text-sm font-bold text-white transition hover:bg-slate-800 sm:w-auto">
                     <iconify-icon icon="solar:cart-large-2-bold" class="text-lg"></iconify-icon>
                     Explore Products
@@ -1397,13 +1397,13 @@
 
             {{-- CTA --}}
             <div class="mt-12 flex flex-col items-center justify-center gap-4 sm:flex-row">
-                <a href="#"
+                <a href="{{ route('coop') }}"
                     class="inline-flex items-center justify-center gap-2 rounded-xl bg-red-500 px-7 py-3 text-sm font-bold text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600">
                     <iconify-icon icon="solar:handshake-bold" class="text-lg"></iconify-icon>
                     Become a Printair Partner
                 </a>
 
-                <a href="#"
+                <a href="{{ route('contact') }}"
                     class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/20 px-7 py-3 text-sm font-bold text-white transition hover:bg-white/10">
                     <iconify-icon icon="solar:document-add-bold" class="text-lg"></iconify-icon>
                     Request Wholesale Pricing
@@ -1558,7 +1558,7 @@
                             </div>
                         </div>
 
-                        <form method="POST" action="{{ route('contact.submit') }}" class="mt-6 space-y-4">
+                        <form method="POST" action="{{ route('contact.send') }}" class="mt-6 space-y-4">
                             @csrf
 
                             <div>
@@ -1620,7 +1620,7 @@
                                     Send Message
                                 </button>
 
-                                <a href="https://wa.me/{{ config('contact.whatsapp') }}" target="_blank"
+                                <a href="https://wa.me/94768860175" target="_blank"
                                     class="inline-flex w-full items-center justify-center gap-2 rounded-xl border border-slate-200 bg-white px-6 py-3 text-sm font-black text-slate-900 transition hover:bg-slate-50 sm:w-auto">
                                     <iconify-icon icon="logos:whatsapp-icon" class="text-lg"></iconify-icon>
                                     WhatsApp Instead

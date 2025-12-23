@@ -1000,21 +1000,42 @@ class ProductController extends Controller
                         ]);
                     }
 
-                    ProductRoll::query()->where('product_id', $product->id)->delete();
-
                     $userId = Auth::user()?->id;
-                    $rows = array_map(fn ($id) => [
-                        'product_id' => $product->id,
-                        'roll_id' => (int) $id,
-                        'is_active' => true,
-                        'created_by' => $userId,
-                        'updated_by' => $userId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ], $rollIds);
+                    $desired = collect($rollIds)->map(fn ($v) => (int) $v)->filter(fn ($v) => $v > 0)->values();
 
-                    foreach (array_chunk($rows, 500) as $chunk) {
-                        ProductRoll::query()->insert($chunk);
+                    $existing = ProductRoll::withTrashed()
+                        ->where('product_id', $product->id)
+                        ->get()
+                        ->keyBy(fn ($r) => (int) $r->roll_id);
+
+                    foreach ($desired as $rid) {
+                        /** @var \App\Models\ProductRoll|null $row */
+                        $row = $existing->get((int) $rid);
+                        if ($row) {
+                            if ($row->trashed()) {
+                                $row->restore();
+                            }
+                            $row->is_active = true;
+                            $row->updated_by = $userId;
+                            $row->save();
+                        } else {
+                            ProductRoll::query()->create([
+                                'product_id' => $product->id,
+                                'roll_id' => (int) $rid,
+                                'is_active' => true,
+                                'created_by' => $userId,
+                                'updated_by' => $userId,
+                            ]);
+                        }
+                    }
+
+                    // Soft-delete any bindings not selected (keeps history, avoids unique conflicts on re-add).
+                    foreach ($existing as $rid => $row) {
+                        if (! $desired->contains((int) $rid) && ! $row->trashed()) {
+                            $row->updated_by = $userId;
+                            $row->save();
+                            $row->delete();
+                        }
                     }
                 } else {
                     ProductRoll::query()->where('product_id', $product->id)->delete();
@@ -1718,24 +1739,41 @@ class ProductController extends Controller
                         ]);
                     }
 
-                    // Idempotent sync: clear then insert
-                    ProductRoll::query()->where('product_id', $product->id)->delete();
-
                     $userId = Auth::user()?->id;
+                    $desired = collect($rollIds)->map(fn ($v) => (int) $v)->filter(fn ($v) => $v > 0)->values();
 
-                    $rows = array_map(fn ($id) => [
-                        'product_id' => $product->id,
-                        'roll_id' => (int) $id,
-                        'is_active' => true,
-                        'created_by' => $userId,
-                        'updated_by' => $userId,
-                        'created_at' => now(),
-                        'updated_at' => now(),
-                    ], $rollIds);
+                    $existing = ProductRoll::withTrashed()
+                        ->where('product_id', $product->id)
+                        ->get()
+                        ->keyBy(fn ($r) => (int) $r->roll_id);
 
-                    // Chunk insert to be safe
-                    foreach (array_chunk($rows, 500) as $chunk) {
-                        ProductRoll::query()->insert($chunk);
+                    foreach ($desired as $rid) {
+                        /** @var \App\Models\ProductRoll|null $row */
+                        $row = $existing->get((int) $rid);
+                        if ($row) {
+                            if ($row->trashed()) {
+                                $row->restore();
+                            }
+                            $row->is_active = true;
+                            $row->updated_by = $userId;
+                            $row->save();
+                        } else {
+                            ProductRoll::query()->create([
+                                'product_id' => $product->id,
+                                'roll_id' => (int) $rid,
+                                'is_active' => true,
+                                'created_by' => $userId,
+                                'updated_by' => $userId,
+                            ]);
+                        }
+                    }
+
+                    foreach ($existing as $rid => $row) {
+                        if (! $desired->contains((int) $rid) && ! $row->trashed()) {
+                            $row->updated_by = $userId;
+                            $row->save();
+                            $row->delete();
+                        }
                     }
 
                 } else {

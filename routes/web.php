@@ -6,7 +6,7 @@ use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\UserCustomerController;
 use App\Http\Controllers\Admin\WorkingGroupController;
 use App\Http\Controllers\HomeController;
-use App\Http\Controllers\ContactController;
+use App\Http\Controllers\PageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use Illuminate\Support\Facades\Route;
@@ -17,18 +17,22 @@ Route::get('/about-us', [HomeController::class, 'about'])->name('about');
 Route::get('/terms-and-conditions', [HomeController::class, 'terms'])->name('terms');
 Route::get('/privacy-policy', [HomeController::class, 'privacy'])->name('privacy');
 Route::get('/terms-and-conditions', [HomeController::class, 'termsAndConditions'])->name('terms.conditions');
-Route::get('/contact', [HomeController::class, 'contact'])->name('contact');
-
+Route::get('/B2B/partners', [HomeController::class, 'partners'])->name('coop');
 // #############################
 // Public Navigation Routes
 // #############################
 Route::get('/products', [HomeController::class, 'products'])->name('products.index');
+Route::get('/products/{product:slug}', [HomeController::class, 'productShow'])->name('products.show');
+Route::post('/products/{product:slug}/price-quote', [HomeController::class, 'productPriceQuote'])
+    ->middleware(['throttle:60,1'])
+    ->name('products.price-quote');
 Route::get('/services', [HomeController::class, 'services'])->name('services.index');
 Route::get('/pricing', [HomeController::class, 'pricing'])->name('pricing.index');
-Route::get('/contact', [HomeController::class, 'contact'])->name('contact');
-Route::post('/contact', [ContactController::class, 'submit'])
-    ->name('contact.submit')
-    ->middleware(['throttle:10,1']);
+Route::get('/contact', [PageController::class, 'contact'])
+    ->name('contact');
+Route::post('/contact', [PageController::class, 'sendContact'])
+    ->middleware(['throttle:contact'])
+    ->name('contact.send');
 Route::get('/quote', [HomeController::class, 'quote'])->name('quotes');
 Route::get('/quote/create', [HomeController::class, 'quote'])->name('quotes.create');
 
@@ -38,6 +42,12 @@ Route::get('/ajax/home/categories', [HomeController::class, 'categories'])
 
 Route::get('/ajax/home/popular-products', [HomeController::class, 'popularProducts'])
     ->name('ajax.home.popular-products');
+
+Route::get('/ajax/products', [HomeController::class, 'productsJson'])
+    ->name('ajax.products.index');
+
+Route::get('/ajax/services', [HomeController::class, 'servicesJson'])
+    ->name('ajax.services.index');
 
 // Social Login
 // #############################

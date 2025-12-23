@@ -4,13 +4,14 @@
 <head>
     <x-seo.meta :title="$seo['title'] ?? null" :description="$seo['description'] ?? null" :keywords="$seo['keywords'] ?? null" :image="$seo['image'] ?? null" />
 
+    <meta name="csrf-token" content="{{ csrf_token() }}">
+
     <link rel="canonical" href="https://example.com/page">
 
     <!-- branding -->
-    <link rel="icon" href="/favicon.ico" type="image/x-icon">
-    <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png">
-    <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32x32.png">
-    <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png">
+    <link rel="icon" href="{{ asset('assets/printair/favicon.ico') }}" type="image/x-icon">
+    <link rel="apple-touch-icon" href="{{ asset('assets/printair/favicon.png') }}">
+    <link rel="icon" type="image/png" href="{{ asset('assets/printair/favicon.png') }}">
     <link rel="manifest" href="{{ asset('assets/printair/site.webmanifest') }}">
 
     <!-- SEO engines-->
@@ -550,9 +551,9 @@
                     'icon' => 'mdi:package-variant',
                 ],
                 ['label' => 'Services', 'route' => 'services.index', 'match' => 'services.*', 'icon' => 'mdi:tools'],
-                ['label' => 'Pricing', 'route' => 'pricing.index', 'match' => 'pricing.*', 'icon' => 'mdi:tag-outline'],
                 ['label' => 'About', 'route' => 'about', 'match' => 'about', 'icon' => 'mdi:information-outline'],
                 ['label' => 'Contact', 'route' => 'contact', 'match' => 'contact', 'icon' => 'mdi:email-outline'],
+                ['label' => 'B2B: Co-Operative', 'route' => 'coop', 'match' => 'coop', 'icon' => 'material-symbols:handshake-outline-rounded']
             ];
 
             // Helper for active styling (route name matches)
@@ -668,13 +669,13 @@
                     </div>
 
                     <div class="flex flex-col gap-3 sm:flex-row sm:items-center">
-                        <a href="#"
+                        <a href="{{ route('coop') }}"
                             class="inline-flex items-center justify-center gap-2 rounded-xl bg-red-500 px-6 py-3 text-sm font-black text-white shadow-lg shadow-red-500/20 transition hover:bg-red-600">
                             <iconify-icon icon="solar:handshake-bold" class="text-lg"></iconify-icon>
                             Become a Partner
                         </a>
 
-                        <a href="#contact"
+                        <a href="{{ route('contact') }}"
                             class="inline-flex items-center justify-center gap-2 rounded-xl border border-white/15 bg-white/5 px-6 py-3 text-sm font-black text-white transition hover:bg-white/10">
                             <iconify-icon icon="solar:chat-round-bold" class="text-lg"></iconify-icon>
                             Talk to us
@@ -791,7 +792,7 @@
                         <li><a href="#" class="hover:text-white">Categories</a></li>
                         <li><a href="#" class="hover:text-white">Design Services</a></li>
                         <li><a href="#" class="hover:text-white">Partner Program</a></li>
-                        <li><a href="#contact" class="hover:text-white">Contact Us</a></li>
+                        <li><a href="{{ route('contact') }}" class="hover:text-white">Contact Us</a></li>
                     </ul>
                 </div>
 
@@ -999,6 +1000,8 @@
             }
         }
     </script>
+
+    @stack('scripts')
 
     <x-analytics-loader />
 

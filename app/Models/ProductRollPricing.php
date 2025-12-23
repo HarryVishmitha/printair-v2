@@ -59,7 +59,6 @@ class ProductRollPricing extends Model
 
     public function scopeActive($query)
     {
-        return $query->where('is_active', true);
+        return $query->where($this->getTable().'.is_active', true);
     }
 }
-

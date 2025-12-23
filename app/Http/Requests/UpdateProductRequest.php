@@ -148,5 +148,15 @@ class UpdateProductRequest extends FormRequest
                 $this->merge([$key => filter_var($this->input($key), FILTER_VALIDATE_BOOLEAN)]);
             }
         }
+
+        // If product_type is dimension_based, dimensions are always required.
+        if ($this->input('product_type') === 'dimension_based') {
+            $this->merge(['requires_dimensions' => true]);
+        }
+
+        // Finishing products are always internal-only.
+        if ($this->input('product_type') === 'finishing') {
+            $this->merge(['visibility' => 'internal']);
+        }
     }
 }
