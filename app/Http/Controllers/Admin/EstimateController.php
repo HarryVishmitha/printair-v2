@@ -358,11 +358,17 @@ class EstimateController extends Controller
 
     public function send(SendEstimateRequest $request, Estimate $estimate)
     {
-        $sent = $this->service->send($estimate, $request->validated());
+        $meta = $request->validated();
+        $meta['ip'] = $request->ip();
+        $meta['user_agent'] = $request->userAgent();
+
+        $sent = $this->service->send($estimate, $meta);
 
         $result = $this->delivery->createShareAndEmail($sent, [
             'reason' => $request->validated('reason'),
             'action' => 'sent',
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
         ]);
 
         session()->flash('share_token', $result['share_token']);
@@ -404,6 +410,8 @@ class EstimateController extends Controller
         $result = $this->delivery->createShareAndEmail($estimate, [
             'reason' => $data['reason'] ?? null,
             'action' => 'resent',
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
         ]);
 
         session()->flash('share_token', $result['share_token']);
@@ -436,7 +444,11 @@ class EstimateController extends Controller
 
     public function accept(AcceptEstimateRequest $request, Estimate $estimate)
     {
-        $this->service->accept($estimate, $request->validated());
+        $meta = $request->validated();
+        $meta['ip'] = $request->ip();
+        $meta['user_agent'] = $request->userAgent();
+
+        $this->service->accept($estimate, $meta);
 
         return redirect()
             ->route('admin.estimates.show', $estimate)
@@ -446,7 +458,10 @@ class EstimateController extends Controller
     public function reject(RejectEstimateRequest $request, Estimate $estimate)
     {
         $data = $request->validated();
-        $this->service->reject($estimate, $data['reason']);
+        $this->service->reject($estimate, $data['reason'], [
+            'ip' => $request->ip(),
+            'user_agent' => $request->userAgent(),
+        ]);
 
         return redirect()
             ->route('admin.estimates.show', $estimate)

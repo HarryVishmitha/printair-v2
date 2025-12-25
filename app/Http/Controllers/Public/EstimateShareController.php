@@ -258,6 +258,30 @@ class EstimateShareController extends Controller
             return $this->shareUnavailable();
         }
 
+        if ($estimate->status === 'accepted') {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('success', 'This estimate is already accepted.');
+        }
+
+        if ($estimate->status === 'rejected') {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('error', 'This estimate was already rejected.');
+        }
+
+        if (in_array($estimate->status, ['expired', 'cancelled', 'converted'], true)) {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('error', 'This estimate is not accepting responses at this time.');
+        }
+
+        if ($estimate->valid_until && \Illuminate\Support\Carbon::parse($estimate->valid_until)->isPast()) {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('error', 'This estimate has expired and cannot be accepted.');
+        }
+
         $recipientEmail = $this->resolveRecipientEmail($estimate);
         if (!$recipientEmail) {
             return redirect()
@@ -274,6 +298,10 @@ class EstimateShareController extends Controller
         DB::transaction(function () use ($share, $estimate, $request) {
             $share = EstimateShare::query()->whereKey($share->id)->lockForUpdate()->firstOrFail();
             $estimate = Estimate::query()->whereKey($estimate->id)->lockForUpdate()->firstOrFail();
+
+            if ($estimate->valid_until && \Illuminate\Support\Carbon::parse($estimate->valid_until)->isPast()) {
+                return;
+            }
 
             if (!in_array($estimate->status, ['sent', 'viewed'], true)) {
                 return;
@@ -320,6 +348,30 @@ class EstimateShareController extends Controller
             return $this->shareUnavailable();
         }
 
+        if ($estimate->status === 'rejected') {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('success', 'This estimate is already rejected.');
+        }
+
+        if ($estimate->status === 'accepted') {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('error', 'This estimate was already accepted.');
+        }
+
+        if (in_array($estimate->status, ['expired', 'cancelled', 'converted'], true)) {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('error', 'This estimate is not accepting responses at this time.');
+        }
+
+        if ($estimate->valid_until && \Illuminate\Support\Carbon::parse($estimate->valid_until)->isPast()) {
+            return redirect()
+                ->route('estimates.public.show', $token)
+                ->with('error', 'This estimate has expired and cannot be rejected.');
+        }
+
         $recipientEmail = $this->resolveRecipientEmail($estimate);
         if (!$recipientEmail) {
             return redirect()
@@ -340,6 +392,10 @@ class EstimateShareController extends Controller
         DB::transaction(function () use ($share, $estimate, $request, $data) {
             $share = EstimateShare::query()->whereKey($share->id)->lockForUpdate()->firstOrFail();
             $estimate = Estimate::query()->whereKey($estimate->id)->lockForUpdate()->firstOrFail();
+
+            if ($estimate->valid_until && \Illuminate\Support\Carbon::parse($estimate->valid_until)->isPast()) {
+                return;
+            }
 
             if (!in_array($estimate->status, ['sent', 'viewed'], true)) {
                 return;

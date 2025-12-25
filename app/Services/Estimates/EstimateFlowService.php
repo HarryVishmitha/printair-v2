@@ -293,6 +293,24 @@ class EstimateFlowService
 
         $this->authorizeUpdate($estimate);
 
+        // Idempotency: if already accepted, treat as safe replay.
+        if ($estimate->status === 'accepted') {
+            return $estimate;
+        }
+
+        // Hard guards for terminal states
+        if (in_array($estimate->status, ['expired', 'cancelled', 'converted', 'rejected'], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'This estimate cannot be accepted in its current state.',
+            ]);
+        }
+
+        if ($estimate->valid_until && \Illuminate\Support\Carbon::parse($estimate->valid_until)->isPast()) {
+            throw ValidationException::withMessages([
+                'valid_until' => 'This estimate has expired and cannot be accepted.',
+            ]);
+        }
+
         if (!in_array($estimate->status, ['sent', 'viewed'], true)) {
             throw ValidationException::withMessages([
                 'status' => 'Only a sent/viewed estimate can be accepted.',
@@ -323,6 +341,24 @@ class EstimateFlowService
         $estimate = $this->reloadForWrite($estimate);
 
         $this->authorizeUpdate($estimate);
+
+        // Idempotency: if already rejected, treat as safe replay.
+        if ($estimate->status === 'rejected') {
+            return $estimate;
+        }
+
+        // Hard guards for terminal states
+        if (in_array($estimate->status, ['expired', 'cancelled', 'converted', 'accepted'], true)) {
+            throw ValidationException::withMessages([
+                'status' => 'This estimate cannot be rejected in its current state.',
+            ]);
+        }
+
+        if ($estimate->valid_until && \Illuminate\Support\Carbon::parse($estimate->valid_until)->isPast()) {
+            throw ValidationException::withMessages([
+                'valid_until' => 'This estimate has expired and cannot be rejected.',
+            ]);
+        }
 
         if (!in_array($estimate->status, ['sent', 'viewed'], true)) {
             throw ValidationException::withMessages([
