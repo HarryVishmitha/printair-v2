@@ -98,5 +98,9 @@ class AppServiceProvider extends ServiceProvider
         Gate::define('manage-product-rolls', function (User $user) {
             return $user->isAdminOrSuperAdmin() || ($user->role?->is_staff ?? false);
         });
+
+        Gate::define('manage-orderFlow', function (User $user) {
+            return $user->isAdminOrSuperAdmin() || ($user->role?->is_staff ?? false);
+        });
     }
 }

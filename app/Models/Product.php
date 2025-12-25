@@ -173,6 +173,31 @@ class Product extends Model
         return $this->hasMany(ProductRoll::class);
     }
 
+    public function estimateItems(): HasMany
+    {
+        return $this->hasMany(EstimateItem::class, 'product_id');
+    }
+
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class, 'product_id');
+    }
+
+    public function invoiceItems(): HasMany
+    {
+        return $this->hasMany(InvoiceItem::class, 'product_id');
+    }
+
+    public function estimateItemFinishingsAsFinishing(): HasMany
+    {
+        return $this->hasMany(EstimateItemFinishing::class, 'finishing_product_id');
+    }
+
+    public function orderItemFinishingsAsFinishing(): HasMany
+    {
+        return $this->hasMany(OrderItemFinishing::class, 'finishing_product_id');
+    }
+
     public function allowedRolls(): BelongsToMany
     {
         return $this->belongsToMany(Roll::class, 'product_rolls')

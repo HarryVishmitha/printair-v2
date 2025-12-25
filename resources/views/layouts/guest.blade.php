@@ -76,45 +76,86 @@
 
         {{-- Main auth shell --}}
         <main class="flex-1 flex items-center justify-center px-4 py-10">
-            <div class="max-w-6xl w-full grid gap-10 md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-center">
+            {{-- Left: brand / copy (hidden on small screens) --}}
+            @php
+                $hideLeftSectionRoutes = ['estimates.public.show'];
+                $hideLeftSection = in_array(Route::currentRouteName(), $hideLeftSectionRoutes);
+            @endphp
 
-                {{-- Left: brand / copy (hidden on small screens) --}}
-                <section class="hidden md:flex flex-col gap-6">
-                    <div
-                        class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
-                        <span class="inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
-                        <span>Printair v2 · Secure Portal</span>
-                    </div>
+            @unless ($hideLeftSection)
+                <div class="max-w-6xl w-full grid gap-10 md:grid-cols-[minmax(0,1.15fr)_minmax(0,0.85fr)] items-center">
 
-                    <div>
-                        <h1 class="text-3xl lg:text-4xl font-semibold text-slate-900 tracking-tight">
-                            Sign in to manage your <span class="text-amber-600">designs &amp; printing</span>.
-                        </h1>
-                        <p class="mt-3 text-sm leading-relaxed text-slate-600 max-w-md">
-                            Access quotations, orders, proofs, and production updates through a single
-                            secure dashboard powered by Printair Advertising.
-                        </p>
-                    </div>
-
-                    <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
-                        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                            <dt class="font-semibold text-slate-800">Fast approvals</dt>
-                            <dd class="mt-1 text-slate-600">Review and confirm your print jobs online.</dd>
+                    <section class="hidden md:flex flex-col gap-6">
+                        <div
+                            class="inline-flex items-center gap-2 rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-medium text-amber-800">
+                            <span class="inline-flex h-2 w-2 rounded-full bg-amber-500"></span>
+                            <span>Printair v2 · Secure Portal</span>
                         </div>
-                        <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
-                            <dt class="font-semibold text-slate-800">Centralised files</dt>
-                            <dd class="mt-1 text-slate-600">Keep designs, specs, and records in one place.</dd>
-                        </div>
-                        <div class="rounded-xl border border-slate-200 bg-slate-900 px-4 py-3 shadow-sm">
-                            <dt class="font-semibold text-amber-300">Secure access</dt>
-                            <dd class="mt-1 text-slate-200">Protected by modern authentication and encryption.</dd>
-                        </div>
-                    </dl>
-                </section>
 
-                {{-- Right: auth card --}}
-                <section>
-                    <div class="mx-auto w-full max-w-md">
+                        <div>
+                            <h1 class="text-3xl lg:text-4xl font-semibold text-slate-900 tracking-tight">
+                                Sign in to manage your <span class="text-amber-600">designs &amp; printing</span>.
+                            </h1>
+                            <p class="mt-3 text-sm leading-relaxed text-slate-600 max-w-md">
+                                Access quotations, orders, proofs, and production updates through a single
+                                secure dashboard powered by Printair Advertising.
+                            </p>
+                        </div>
+
+                        <dl class="grid grid-cols-1 sm:grid-cols-3 gap-4 text-xs">
+                            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                                <dt class="font-semibold text-slate-800">Fast approvals</dt>
+                                <dd class="mt-1 text-slate-600">Review and confirm your print jobs online.</dd>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+                                <dt class="font-semibold text-slate-800">Centralised files</dt>
+                                <dd class="mt-1 text-slate-600">Keep designs, specs, and records in one place.</dd>
+                            </div>
+                            <div class="rounded-xl border border-slate-200 bg-slate-900 px-4 py-3 shadow-sm">
+                                <dt class="font-semibold text-amber-300">Secure access</dt>
+                                <dd class="mt-1 text-slate-200">Protected by modern authentication and encryption.</dd>
+                            </div>
+                        </dl>
+                    </section>
+
+
+                    {{-- Right: auth card --}}
+                    <section>
+                        <div class="mx-auto w-full max-w-md">
+                            <div
+                                class="bg-white shadow-xl shadow-slate-200/40 border border-slate-200 rounded-2xl px-6 py-6 sm:px-8 sm:py-7">
+                                {{-- Optional small logo for mobile --}}
+                                <div class="flex items-center justify-center mb-5 md:hidden">
+                                    <a href="{{ route('home') }}" class="inline-flex items-center gap-2">
+                                        <x-application-logo class="w-12 h-12 text-slate-500" />
+                                        <span class="sr-only">Printair Advertising</span>
+                                    </a>
+                                </div>
+
+                                {{ $slot }}
+                            </div>
+
+                            {{-- Helper text under card --}}
+                            <p class="mt-4 text-[11px] text-center text-slate-500">
+                                By continuing you agree to Printair’s
+                                <a href="{{ route('terms.conditions') }}"
+                                    class="font-medium text-slate-700 hover:text-amber-600 underline underline-offset-2">
+                                    Terms of Service
+                                </a>
+                                and
+                                <a href="{{ route('privacy') }}"
+                                    class="font-medium text-slate-700 hover:text-amber-600 underline underline-offset-2">
+                                    Privacy Policy
+                                </a>.
+                            </p>
+                        </div>
+                    </section>
+
+                </div>
+            @endunless
+            @unless (!$hideLeftSection)
+                <section class="w-[75%] mx-auto">
+                    <div class="w-full">
                         <div
                             class="bg-white shadow-xl shadow-slate-200/40 border border-slate-200 rounded-2xl px-6 py-6 sm:px-8 sm:py-7">
                             {{-- Optional small logo for mobile --}}
@@ -127,24 +168,9 @@
 
                             {{ $slot }}
                         </div>
-
-                        {{-- Helper text under card --}}
-                        <p class="mt-4 text-[11px] text-center text-slate-500">
-                            By continuing you agree to Printair’s
-                            <a href="{{ route('terms') }}"
-                                class="font-medium text-slate-700 hover:text-amber-600 underline underline-offset-2">
-                                Terms of Service
-                            </a>
-                            and
-                            <a href="{{ route('privacy') }}"
-                                class="font-medium text-slate-700 hover:text-amber-600 underline underline-offset-2">
-                                Privacy Policy
-                            </a>.
-                        </p>
                     </div>
                 </section>
-
-            </div>
+            @endunless
         </main>
 
         {{-- Footer --}}

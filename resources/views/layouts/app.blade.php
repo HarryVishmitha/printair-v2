@@ -103,6 +103,18 @@
             ],
         ],
         [
+            'label' => 'Sales',
+            'items' => [
+                [
+                    'label' => 'Quotations',
+                    'icon' => 'hugeicons:estimate-01',
+                    'route' => route('admin.estimates.index'), // change route name if needed
+                    'active' => request()->routeIs('admin.estimates.*'),
+                    'visible' => $user?->can('manage-orderFlow') ?? false,
+                ],
+            ],
+        ],
+        [
             'label' => 'Inventory Management',
             'items' => [
                 [

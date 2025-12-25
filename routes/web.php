@@ -2,6 +2,9 @@
 
 use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\AdminPricingController;
+use App\Http\Controllers\Admin\BillingController;
+use App\Http\Controllers\Admin\EstimateController;
+use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\UserCustomerController;
 use App\Http\Controllers\Admin\WorkingGroupController;
@@ -240,6 +243,67 @@ Route::prefix('admin')
         Route::patch('rolls/{roll}/update', [\App\Http\Controllers\Admin\RollController::class, 'update'])->name('rolls.update');
         Route::delete('rolls/{roll}/delete', [\App\Http\Controllers\Admin\RollController::class, 'destroy'])->name('rolls.destroy');
     });
+
+	Route::prefix('admin')->name('admin.')->middleware(['auth', 'verified', 'can:manage-orderFlow'])->group(function () {
+	    // Estimates
+	    Route::get('/estimates', [EstimateController::class, 'index'])->name('estimates.index');
+	    Route::get('/estimates/create', [EstimateController::class, 'create'])->name('estimates.create');
+	    Route::post('/estimates', [EstimateController::class, 'store'])->name('estimates.store');
+	    Route::get('/estimates/products', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'products'])->name('estimates.products');
+	    Route::get('/estimates/products/{product}/rolls', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'rolls'])->name('estimates.products.rolls');
+	    Route::post('/estimates/quote', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'quote'])->name('estimates.quote');
+	    Route::get('/estimates/customer-users', [\App\Http\Controllers\Admin\EstimateCustomerController::class, 'userSearch'])->name('estimates.customer-users');
+	    Route::post('/estimates/customers', [\App\Http\Controllers\Admin\EstimateCustomerController::class, 'store'])->name('estimates.customers.store');
+	    Route::get('/estimates/{estimate}', [EstimateController::class, 'show'])->name('estimates.show');
+	    Route::get('/estimates/{estimate}/pdf', [EstimateController::class, 'downloadPdf'])->name('estimates.pdf');
+	    Route::get('/estimates/{estimate}/edit', [EstimateController::class, 'edit'])->name('estimates.edit');
+	    Route::patch('/estimates/{estimate}', [EstimateController::class, 'update'])->name('estimates.update');
+
+    Route::post('/estimates/{estimate}/recalc', [EstimateController::class, 'recalc'])->name('estimates.recalc');
+
+    Route::post('/estimates/{estimate}/items', [EstimateController::class, 'upsertItem'])->name('estimates.items.store');
+    Route::patch('/estimates/{estimate}/items/{item}', [EstimateController::class, 'upsertItem'])->name('estimates.items.update');
+    Route::delete('/estimates/{estimate}/items/{item}', [EstimateController::class, 'deleteItem'])->name('estimates.items.delete');
+
+	    Route::post('/estimates/{estimate}/send', [EstimateController::class, 'send'])->name('estimates.send');
+	    Route::post('/estimates/{estimate}/resend', [EstimateController::class, 'resend'])->name('estimates.resend');
+	    Route::post('/estimates/{estimate}/accept', [EstimateController::class, 'accept'])->name('estimates.accept');
+	    Route::post('/estimates/{estimate}/reject', [EstimateController::class, 'reject'])->name('estimates.reject');
+
+    Route::post('/estimates/{estimate}/shares', [EstimateController::class, 'createShare'])->name('estimates.shares.create');
+    Route::post('/estimates/{estimate}/shares/{share}/revoke', [EstimateController::class, 'revokeShare'])->name('estimates.shares.revoke');
+
+    // Orders
+    Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+    Route::post('/estimates/{estimate}/convert-to-order', [OrderController::class, 'createFromEstimate'])->name('orders.from-estimate');
+    Route::post('/orders/{order}/confirm', [OrderController::class, 'confirm'])->name('orders.confirm');
+    Route::post('/orders/{order}/status', [OrderController::class, 'changeStatus'])->name('orders.status');
+
+    // Billing (Invoices + Payments)
+    Route::post('/orders/{order}/invoices', [BillingController::class, 'createInvoiceFromOrder'])->name('invoices.from-order');
+    Route::get('/invoices/{invoice}', [BillingController::class, 'showInvoice'])->name('invoices.show');
+    Route::post('/invoices/{invoice}/issue', [BillingController::class, 'issueInvoice'])->name('invoices.issue');
+    Route::post('/invoices/{invoice}/void', [BillingController::class, 'voidInvoice'])->name('invoices.void');
+
+    Route::post('/payments', [BillingController::class, 'recordPayment'])->name('payments.store');
+    Route::get('/payments/{payment}', [BillingController::class, 'showPayment'])->name('payments.show');
+    Route::post('/payments/{payment}/confirm', [BillingController::class, 'confirmPayment'])->name('payments.confirm');
+    Route::post('/payments/{payment}/allocate/{invoice}', [BillingController::class, 'allocatePayment'])->name('payments.allocate');
+});
+
+// Public - Estimate share view + accept/reject by token
+Route::get('/estimate/{token}', [\App\Http\Controllers\Public\EstimateShareController::class, 'show'])->name('estimates.public.show');
+Route::get('/estimate/{token}/pdf', [\App\Http\Controllers\Public\EstimateShareController::class, 'downloadPdf'])
+    ->name('estimates.public.pdf');
+Route::post('/estimate/{token}/otp/send', [\App\Http\Controllers\Public\EstimateShareController::class, 'sendOtp'])
+    ->middleware(['throttle:10,1'])
+    ->name('estimates.public.otp.send');
+Route::post('/estimate/{token}/otp/verify', [\App\Http\Controllers\Public\EstimateShareController::class, 'verifyOtp'])
+    ->middleware(['throttle:20,1'])
+    ->name('estimates.public.otp.verify');
+Route::post('/estimate/{token}/accept', [\App\Http\Controllers\Public\EstimateShareController::class, 'accept'])->name('estimates.public.accept');
+Route::post('/estimate/{token}/reject', [\App\Http\Controllers\Public\EstimateShareController::class, 'reject'])->name('estimates.public.reject');
 
 Route::middleware('auth')->group(function () {
     // List pages

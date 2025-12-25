@@ -6,6 +6,7 @@ use App\Models\ActivityLog;
 use App\Notifications\VerifyEmailNotification;
 use Illuminate\Contracts\Auth\MustVerifyEmail;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Foundation\Auth\User as Authenticatable;
 use Illuminate\Notifications\Notifiable;
 
@@ -88,6 +89,91 @@ class User extends Authenticatable implements MustVerifyEmail
     public function activityLogs()
     {
         return $this->hasMany(ActivityLog::class);
+    }
+
+    public function createdEstimates(): HasMany
+    {
+        return $this->hasMany(Estimate::class, 'created_by');
+    }
+
+    public function updatedEstimates(): HasMany
+    {
+        return $this->hasMany(Estimate::class, 'updated_by');
+    }
+
+    public function lockedEstimates(): HasMany
+    {
+        return $this->hasMany(Estimate::class, 'locked_by');
+    }
+
+    public function createdOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'created_by');
+    }
+
+    public function updatedOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'updated_by');
+    }
+
+    public function lockedOrders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'locked_by');
+    }
+
+    public function createdInvoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class, 'created_by');
+    }
+
+    public function updatedInvoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class, 'updated_by');
+    }
+
+    public function lockedInvoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class, 'locked_by');
+    }
+
+    public function receivedPayments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'received_by');
+    }
+
+    public function createdPayments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'created_by');
+    }
+
+    public function updatedPayments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'updated_by');
+    }
+
+    public function estimateStatusChanges(): HasMany
+    {
+        return $this->hasMany(EstimateStatusHistory::class, 'changed_by');
+    }
+
+    public function orderStatusChanges(): HasMany
+    {
+        return $this->hasMany(OrderStatusHistory::class, 'changed_by');
+    }
+
+    public function invoiceStatusChanges(): HasMany
+    {
+        return $this->hasMany(InvoiceStatusHistory::class, 'changed_by');
+    }
+
+    public function createdEstimateShares(): HasMany
+    {
+        return $this->hasMany(EstimateShare::class, 'created_by');
+    }
+
+    public function paymentAllocationsCreated(): HasMany
+    {
+        return $this->hasMany(PaymentAllocation::class, 'created_by');
     }
 
     public function pricingAudits()

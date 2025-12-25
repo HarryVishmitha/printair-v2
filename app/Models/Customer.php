@@ -4,6 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Customer extends Model
@@ -47,7 +48,20 @@ class Customer extends Model
         return $this->belongsTo(WorkingGroup::class);
     }
 
-    // Later: orders(), estimates(), jobs() etc.
+    public function estimates(): HasMany
+    {
+        return $this->hasMany(Estimate::class, 'customer_id');
+    }
+
+    public function orders(): HasMany
+    {
+        return $this->hasMany(Order::class, 'customer_id');
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(Payment::class, 'customer_id');
+    }
 
     /* =======================
      | Scopes / Helpers

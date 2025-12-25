@@ -30,5 +30,14 @@ class Option extends Model
             ->wherePivotNull('deleted_at')
             ->orderBy('product_options.sort_index');
     }
-}
 
+    public function estimateItemFinishings(): HasMany
+    {
+        return $this->hasMany(EstimateItemFinishing::class, 'option_id');
+    }
+
+    public function orderItemFinishings(): HasMany
+    {
+        return $this->hasMany(OrderItemFinishing::class, 'option_id');
+    }
+}

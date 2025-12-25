@@ -42,6 +42,21 @@ class Roll extends Model
         return $this->hasMany(ProductRollPricing::class, 'roll_id');
     }
 
+    public function estimateItems(): HasMany
+    {
+        return $this->hasMany(EstimateItem::class, 'roll_id');
+    }
+
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class, 'roll_id');
+    }
+
+    public function invoiceItems(): HasMany
+    {
+        return $this->hasMany(InvoiceItem::class, 'roll_id');
+    }
+
     // ---------- Scopes ----------
 
     public function scopeActive($query)

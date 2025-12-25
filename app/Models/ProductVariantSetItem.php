@@ -3,7 +3,7 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 
 class ProductVariantSetItem extends Model
 {
@@ -20,5 +20,19 @@ class ProductVariantSetItem extends Model
     {
         return $this->belongsTo(Option::class);
     }
-}
 
+    public function estimateItems(): HasMany
+    {
+        return $this->hasMany(EstimateItem::class, 'variant_set_item_id');
+    }
+
+    public function orderItems(): HasMany
+    {
+        return $this->hasMany(OrderItem::class, 'variant_set_item_id');
+    }
+
+    public function invoiceItems(): HasMany
+    {
+        return $this->hasMany(InvoiceItem::class, 'variant_set_item_id');
+    }
+}
