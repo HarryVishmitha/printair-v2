@@ -2,7 +2,7 @@
     @php
         $wa = config('printair.contact_whatsapp', '94768860175');
         $phone = config('printair.contact_phone', '0768860175');
-        $email = config('printair.contact_email', 'contact@printair.lk');
+        $email = 'contact@printair.lk';
         $address = config('printair.contact_address', 'No. 67/D/2, Uggashena Road, Walpola, Ragama, Sri Lanka');
         $mapEmbed = config(
             'printair.contact_map_embed_url',
