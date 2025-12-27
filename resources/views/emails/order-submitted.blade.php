@@ -1,7 +1,7 @@
 @extends('emails.layout', [
     'emailTitle' => 'Order Submitted – Printair',
     'emailHeader' => 'Order Successfully Submitted',
-    'emailSubheader' => 'Order ID: ' . $order->id
+    'emailSubheader' => 'Order No: ' . ($order->order_no ?? $order->id)
 ])
 
 @section('content')
@@ -18,8 +18,8 @@
         <table width="100%" cellpadding="0" cellspacing="0">
             <tr>
                 <td style="padding: 8px 0;">
-                    <div style="font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Order ID</div>
-                    <div style="font-size: 20px; color: #0f172a; font-weight: 800; margin-top: 4px;">#{{ $order->id }}</div>
+                    <div style="font-size: 13px; color: #64748b; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Order No</div>
+                    <div style="font-size: 20px; color: #0f172a; font-weight: 800; margin-top: 4px;">#{{ $order->order_no ?? $order->id }}</div>
                 </td>
             </tr>
         </table>

@@ -35,6 +35,10 @@
 	            'items' => ($estimate?->items ?? collect())->map(fn($it) => [
 	                'id' => $it->id,
 	                'product_id' => $it->product_id,
+	                'variant_set_item_id' => $it->variant_set_item_id,
+	                'options' => is_array($it->pricing_snapshot)
+                        ? (($it->pricing_snapshot['options'] ?? null) ?? (data_get($it->pricing_snapshot, 'input.options') ?? []))
+                        : [],
 	                'title' => $it->title,
 	                'description' => $it->description,
 	                'qty' => (int) $it->qty,
@@ -44,6 +48,14 @@
 	                'area_sqft' => $it->area_sqft,
 	                'offcut_sqft' => $it->offcut_sqft,
 	                'roll_id' => $it->roll_id,
+	                'finishings' => ($it->finishings ?? collect())->map(fn($f) => [
+	                    'finishing_product_id' => (int) $f->finishing_product_id,
+	                    'label' => (string) ($f->label ?? ''),
+	                    'qty' => (int) ($f->qty ?? 1),
+	                    'unit_price' => (float) ($f->unit_price ?? 0),
+	                    'total' => (float) ($f->total ?? 0),
+	                    'pricing_snapshot' => $f->pricing_snapshot,
+	                ])->values(),
 	                'pricing_snapshot' => $it->pricing_snapshot,
 	                'unit_price' => (float) $it->unit_price,
 	                'line_subtotal' => (float) $it->line_subtotal,
@@ -485,15 +497,61 @@
                                         </div>
                                     </template>
 
-                                    <div class="mt-3">
-                                        <input x-model="it.title" :disabled="isReadOnly()"
-                                            class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
-                                            placeholder="Item title (e.g., Banner Printing)" />
-                                    </div>
+	                                    <div class="mt-3">
+	                                        <input x-model="it.title" @input="it._title_auto = false" :disabled="isReadOnly()"
+	                                            class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+	                                            placeholder="Item title (e.g., Banner Printing)" />
+	                                    </div>
 
                                     <textarea x-model="it.description" :disabled="isReadOnly()" rows="2"
                                         class="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
                                         placeholder="Short description…"></textarea>
+
+	                                    {{-- Variants (Option Groups + Valid Combinations) --}}
+	                                    <template x-if="(it._option_groups || []).length">
+	                                        <div class="mt-4 rounded-3xl border border-slate-200 bg-white p-4">
+	                                            <div class="flex items-center justify-between">
+	                                                <div class="text-xs font-black text-slate-900">Variants</div>
+	                                                <button type="button"
+	                                                    class="text-[11px] font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-60"
+	                                                    :disabled="isReadOnly()"
+	                                                    @click="it.options = {}; scheduleQuote(it)">
+	                                                    Clear
+	                                                </button>
+	                                            </div>
+
+	                                            <div class="mt-4 space-y-4">
+	                                                <template x-for="(g, gIndex) in (it._option_groups || [])" :key="g.id">
+	                                                    <div class="rounded-2xl border border-slate-200 p-4">
+	                                                        <div class="flex items-center justify-between gap-3">
+	                                                            <div class="font-semibold text-slate-900" x-text="g.name"></div>
+	                                                            <template x-if="g.is_required">
+	                                                                <span class="text-[11px] rounded-full bg-red-50 text-red-700 px-2.5 py-1 font-semibold">Required</span>
+	                                                            </template>
+	                                                            <template x-if="!g.is_required">
+	                                                                <span class="text-[11px] rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 font-semibold">Optional</span>
+	                                                            </template>
+	                                                        </div>
+
+	                                                        <div class="mt-3 grid grid-cols-2 gap-2">
+	                                                            <template x-for="op in getGroupOptionsForItem(it, g, gIndex)" :key="op.id">
+	                                                                <label
+	                                                                    class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 hover:border-slate-900/30 cursor-pointer"
+	                                                                    :class="Number(it.options?.[g.id]) === Number(op.id) ? 'border-slate-900 ring-2 ring-slate-900/10 bg-slate-900/[0.02]' : ''">
+	                                                                    <input type="radio" class="accent-slate-900"
+	                                                                        :name="`option_${it._key}_${g.id}`"
+	                                                                        :value="op.id"
+	                                                                        x-model="it.options[g.id]"
+	                                                                        @change="syncDependentSelectionsForItem(it); scheduleQuote(it)" />
+	                                                                    <span class="text-sm font-semibold text-slate-800" x-text="op.name"></span>
+	                                                                </label>
+	                                                            </template>
+	                                                        </div>
+	                                                    </div>
+	                                                </template>
+	                                            </div>
+	                                        </div>
+	                                    </template>
 
 	                                    <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-5">
 	                                        <div>
@@ -518,10 +576,13 @@
 	                                            <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Line Total</label>
 	                                            <div class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
 	                                                <span x-text="state.currency"></span>
-	                                                <span x-text="formatMoney(it.line_total)"></span>
+	                                                <span x-text="formatMoney(lineTotalWithFinishings(it))"></span>
 	                                            </div>
 	                                            <p class="mt-1 text-[11px] text-slate-500">
-	                                                Sub: <span x-text="formatMoney(it.line_subtotal)"></span>
+	                                                Base: <span x-text="formatMoney(it.line_subtotal)"></span>
+	                                                <template x-if="finishingsTotal(it) > 0">
+	                                                    <span> · Finishings: <span x-text="formatMoney(finishingsTotal(it))"></span></span>
+	                                                </template>
 	                                            </p>
 	                                        </div>
 	                                        <div class="flex items-end justify-end">
@@ -535,10 +596,76 @@
                             </div>
 
                             <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
-                                <span>Subtotal: <span class="font-semibold text-slate-700" x-text="formatMoney(it.line_subtotal)"></span></span>
+                                <span>Base: <span class="font-semibold text-slate-700" x-text="formatMoney(it.line_subtotal)"></span></span>
+                                <span>Finishings: <span class="font-semibold text-slate-700" x-text="formatMoney(finishingsTotal(it))"></span></span>
                                 <span>Discount: <span class="font-semibold text-slate-700" x-text="formatMoney(it.discount_amount)"></span></span>
                                 <span>Tax: <span class="font-semibold text-slate-700" x-text="formatMoney(it.tax_amount)"></span></span>
                             </div>
+
+                            {{-- Finishings (optional) --}}
+                            <template x-if="(it.finishings || []).length">
+                                <div class="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
+                                    <div class="flex items-start justify-between gap-3">
+                                        <div>
+                                            <div class="text-xs font-black text-slate-900">Finishings</div>
+                                            <div class="mt-1 text-[11px] text-slate-500">
+                                                Select required finishings and quantities. Pricing is auto-estimated; you can override unit prices manually.
+                                            </div>
+                                        </div>
+                                        <div class="text-[11px] text-slate-500">
+                                            Total: <span class="font-extrabold text-slate-900" x-text="state.currency + ' ' + formatMoney(finishingsTotal(it))"></span>
+                                        </div>
+                                    </div>
+
+                                    <div class="mt-4 space-y-2">
+                                        <template x-for="f in (it.finishings || [])" :key="f.finishing_product_id">
+                                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	                                                    <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+	                                                        <input type="checkbox" class="rounded border-slate-300"
+	                                                            x-model="f.selected"
+	                                                            :disabled="isReadOnly() || f.is_required"
+	                                                            @change="onFinishingToggle(it, f)">
+	                                                        <span x-text="f.label || ('Finishing #' + f.finishing_product_id)"></span>
+	                                                        <template x-if="f.is_required">
+	                                                            <span class="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+	                                                                Required
+                                                            </span>
+                                                        </template>
+                                                    </label>
+
+                                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:items-center">
+                                                        <div>
+	                                                            <input type="number" min="1" step="1"
+	                                                                class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
+	                                                                x-model.number="f.qty"
+	                                                                :disabled="isReadOnly() || !f.selected"
+	                                                                @input.debounce.250ms="onFinishingQtyInput(it, f)">
+	                                                            <div class="mt-1 text-[10px] text-slate-500" x-show="f.min_qty || f.max_qty">
+	                                                                <span x-text="(f.min_qty ? ('min ' + f.min_qty) : '') + (f.max_qty ? (' max ' + f.max_qty) : '')"></span>
+	                                                            </div>
+	                                                        </div>
+
+                                                        <div>
+	                                                            <input type="number" min="0" step="0.01"
+	                                                                class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
+	                                                                x-model.number="f.unit_price"
+	                                                                :disabled="isReadOnly() || !f.selected"
+	                                                                @input.debounce.250ms="onFinishingUnitPriceInput(it, f)">
+	                                                            <div class="mt-1 text-[10px] text-slate-500">Unit price</div>
+	                                                        </div>
+
+                                                        <div class="text-right">
+                                                            <div class="text-[11px] text-slate-500">Line</div>
+                                                            <div class="text-sm font-extrabold text-slate-900" x-text="state.currency + ' ' + formatMoney(finishingTotalInline(f))"></div>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </template>
+                                    </div>
+                                </div>
+                            </template>
                         </div>
                     </template>
 
@@ -783,6 +910,9 @@
 	                            _product_search: '',
 	                            _product_search_t: null,
 	                            _product_results: [],
+	                            _title_auto: true,
+	                            options: (i.options && typeof i.options === 'object') ? i.options : {},
+	                            variant_set_item_id: i.variant_set_item_id ? String(i.variant_set_item_id) : '', // legacy (single-variant)
 	                            roll_choice: i.roll_id ? String(i.roll_id) : '',
 	                            _pricing_snapshot: i.pricing_snapshot || null,
 	                            _use_quoted_subtotal: false,
@@ -790,6 +920,14 @@
 	                            _available_rolls: [],
 	                            _roll_auto: false,
 	                            _roll_rotated: false,
+	                            _option_groups: [],
+	                            _variant_matrix: [],
+	                            _finishings_catalog: [],
+	                            finishings: (i.finishings || []).map(f => ({
+	                                ...f,
+	                                selected: true,
+	                                _manual_price: false,
+	                            })),
 	                        })),
                         customer_snapshot: initial.customer_snapshot || {},
                     },
@@ -813,7 +951,11 @@
 	                            }
 	                            await this.hydrateSelectedProducts();
 	                            // Re-quote items (especially when WG changes)
-	                            this.state.items.forEach(it => this.scheduleQuote(it));
+	                            this.state.items.forEach(it => {
+	                                this.loadVariantsForItem(it);
+	                                this.loadFinishingsForItem(it);
+	                                this.scheduleQuote(it);
+	                            });
 	                        });
 
                         this.$watch('state.customer_id', (val) => {
@@ -848,6 +990,8 @@
 	                            this.hydrateSelectedProducts().then(() => {
 	                                this.state.items.forEach(it => {
 	                                    this.loadRollsForItem(it);
+	                                    this.loadVariantsForItem(it);
+	                                    this.loadFinishingsForItem(it);
 	                                    this.scheduleQuote(it);
 	                                });
 	                            });
@@ -978,9 +1122,18 @@
                     },
 
 	                    onProductSelected(it) {
+	                        const prevName = it._prev_product_name ? String(it._prev_product_name) : '';
 	                        const p = this.productForItem(it);
 	                        if (!p) return;
-	                        if (!it.title) it.title = p.name;
+	                        const shouldAutoTitle =
+	                            !it.title ||
+	                            it._title_auto ||
+	                            (prevName && String(it.title) === prevName);
+	                        if (shouldAutoTitle) {
+	                            it.title = p.name;
+	                            it._title_auto = true;
+	                        }
+	                        it._prev_product_name = '';
                         if (!this.requiresDimensions(it)) {
                             it.width = null;
                             it.height = null;
@@ -989,13 +1142,21 @@
                             it.roll_id = null;
                             it.area_sqft = null;
                             it.offcut_sqft = 0;
-                        } else {
-                            if (!it.unit) it.unit = 'in';
-	                        }
+	                        } else {
+	                            if (!it.unit) it.unit = 'in';
+		                        }
+	                        it.options = {};
+	                        it.variant_set_item_id = '';
+	                        it._option_groups = [];
+	                        it._variant_matrix = [];
+	                        it._finishings_catalog = [];
+	                        it.finishings = [];
 	                        it._manual_price = false;
 	                        it._use_quoted_subtotal = false;
 	                        it._pricing_snapshot = null;
 	                        this.loadRollsForItem(it);
+	                        this.loadVariantsForItem(it);
+	                        this.loadFinishingsForItem(it);
 	                        this.scheduleQuote(it);
 	                    },
 
@@ -1039,6 +1200,11 @@
 	                            const pid = it.product_id ? String(it.product_id) : '';
 	                            if (pid && this.productsById[pid]) {
 	                                it._product = this.productsById[pid];
+	                                if (!it.title || String(it.title) === String(it._product.name || '')) {
+	                                    it._title_auto = true;
+	                                } else {
+	                                    it._title_auto = false;
+	                                }
 	                            }
 	                        });
 	                    },
@@ -1097,6 +1263,7 @@
 	                    },
 
 	                    selectProduct(it, p) {
+	                        it._prev_product_name = it._product?.name ? String(it._product.name) : '';
 	                        it.product_id = String(p.id);
 	                        it._product = p;
 	                        it._product_open = false;
@@ -1112,10 +1279,15 @@
 	                            _key: uuid(),
 	                            product_id: '',
 	                            _product: null,
+	                            _title_auto: true,
 	                            _product_open: false,
 	                            _product_search: '',
 	                            _product_search_t: null,
 	                            _product_results: [],
+	                            options: {},
+	                            variant_set_item_id: '', // legacy
+	                            _option_groups: [],
+	                            _variant_matrix: [],
 	                            title: '',
 	                            description: '',
 	                            qty: 1,
@@ -1126,6 +1298,8 @@
 	                            offcut_sqft: 0,
 	                            roll_id: null,
 	                            roll_choice: '',
+	                            _finishings_catalog: [],
+	                            finishings: [],
 	                            pricing_snapshot: null,
 	                            _pricing_snapshot: null,
 	                            _use_quoted_subtotal: false,
@@ -1183,6 +1357,137 @@
                         }
                     },
 
+                    async loadVariantsForItem(it) {
+                        it._option_groups = it._option_groups || [];
+                        it._variant_matrix = it._variant_matrix || [];
+                        it.options = (it.options && typeof it.options === 'object') ? it.options : {};
+
+                        if (!it.product_id || !this.state.working_group_id) {
+                            it._option_groups = [];
+                            it._variant_matrix = [];
+                            it.options = {};
+                            return;
+                        }
+
+                        try {
+                            const pid = String(it.product_id);
+                            const url = new URL(`${this.rollsUrlBase}/${pid}/variants`, window.location.origin);
+                            url.searchParams.set('working_group_id', Number(this.state.working_group_id));
+
+                            const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(data?.message || 'Unable to load variants');
+
+                            it._option_groups = data.option_groups || [];
+                            it._variant_matrix = data.variant_matrix || [];
+
+                            // Clear selections that no longer exist in catalog
+                            const allowedByGroup = {};
+                            (it._option_groups || []).forEach(g => {
+                                allowedByGroup[String(g.id)] = new Set((g.options || []).map(o => String(o.id)));
+                            });
+
+                            Object.keys(it.options || {}).forEach(gid => {
+                                const oid = it.options[gid];
+                                const set = allowedByGroup[String(gid)];
+                                if (!set || !set.has(String(oid))) {
+                                    delete it.options[gid];
+                                }
+                            });
+
+                            // Ensure dependent selections remain valid
+                            this.syncDependentSelectionsForItem(it);
+                        } catch (e) {
+                            console.warn(e);
+                            it._option_groups = [];
+                            it._variant_matrix = [];
+                            it.options = {};
+                        }
+                    },
+
+                    async loadFinishingsForItem(it) {
+                        it._finishings_catalog = it._finishings_catalog || [];
+                        it.finishings = it.finishings || [];
+
+                        if (!it.product_id || !this.state.working_group_id) {
+                            it._finishings_catalog = [];
+                            it.finishings = [];
+                            return;
+                        }
+
+                        try {
+                            const pid = String(it.product_id);
+                            const url = new URL(`${this.rollsUrlBase}/${pid}/finishings`, window.location.origin);
+                            url.searchParams.set('working_group_id', Number(this.state.working_group_id));
+
+                            const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(data?.message || 'Unable to load finishings');
+
+                            const catalog = data.items || [];
+                            it._finishings_catalog = catalog;
+
+                            const existingById = {};
+                            (it.finishings || []).forEach(f => {
+                                existingById[String(f.finishing_product_id)] = f;
+                            });
+
+                            const merged = [];
+                            for (const c of catalog) {
+                                const fid = Number(c.finishing_product_id);
+                                const existing = existingById[String(fid)] || null;
+
+                                const isRequired = !!c.is_required;
+                                const selected = existing ? true : isRequired;
+                                const qty = existing ? Number(existing.qty || 1) : Number(c.default_qty || 1);
+                                const unitPrice = existing ? Number(existing.unit_price || 0) : Number(c.unit_price || 0);
+                                const computedTotal = Math.max(0, Math.max(1, qty) * Math.max(0, unitPrice));
+
+                                merged.push({
+                                    finishing_product_id: fid,
+                                    label: existing?.label || c.name || (`Finishing #${fid}`),
+                                    selected,
+                                    qty: Math.max(1, qty),
+                                    unit_price: unitPrice,
+                                    total: existing ? Number(existing.total || 0) : (selected ? computedTotal : 0),
+                                    pricing_snapshot: existing?.pricing_snapshot || null,
+                                    is_required: isRequired,
+                                    min_qty: c.min_qty === null || c.min_qty === undefined ? null : Number(c.min_qty),
+                                    max_qty: c.max_qty === null || c.max_qty === undefined ? null : Number(c.max_qty),
+                                    _manual_price: false,
+                                });
+                            }
+
+                            // Keep any legacy finishings that are already saved but not present in catalog
+                            for (const k of Object.keys(existingById)) {
+                                const f = existingById[k];
+                                if (!merged.some(x => String(x.finishing_product_id) === String(f.finishing_product_id))) {
+                                    merged.push({
+                                        finishing_product_id: Number(f.finishing_product_id),
+                                        label: f.label || (`Finishing #${f.finishing_product_id}`),
+                                        selected: true,
+                                        qty: Math.max(1, Number(f.qty || 1)),
+                                        unit_price: Number(f.unit_price || 0),
+                                        total: Number(f.total || 0),
+                                        pricing_snapshot: f.pricing_snapshot || null,
+                                        is_required: false,
+                                        min_qty: null,
+                                        max_qty: null,
+                                        _manual_price: false,
+                                    });
+                                }
+                            }
+
+                            it.finishings = merged;
+
+                            // (Re)quote after loading defaults
+                            this.scheduleQuote(it);
+                        } catch (e) {
+                            console.warn(e);
+                            it._finishings_catalog = [];
+                        }
+                    },
+
                     onRollChoiceChanged(it) {
                         // roll_choice: '' => Auto; else explicit roll
                         if (!it.roll_choice) {
@@ -1227,6 +1532,145 @@
 	                        it.line_total = Math.max(0, it.line_subtotal - discount + tax);
 	                    },
 
+                    finishingsTotal(it) {
+                        return (it.finishings || []).reduce((s, f) => {
+                            if (!f || !f.selected) return s;
+                            const qty = Math.max(0, Number(f.qty || 0));
+                            const unit = Math.max(0, Number(f.unit_price || 0));
+                            const total = (f.total !== null && f.total !== undefined)
+                                ? Math.max(0, Number(f.total || 0))
+                                : Math.max(0, qty * unit);
+                            return s + total;
+                        }, 0);
+                    },
+
+                    getSelectedOptionsMapForItem(it) {
+                        const map = {};
+                        const raw = (it && typeof it.options === 'object' && it.options) ? it.options : {};
+                        for (const [gid, oid] of Object.entries(raw)) {
+                            if (oid) map[Number(gid)] = Number(oid);
+                        }
+                        return map;
+                    },
+
+                    getGroupOptionsForItem(it, group, groupIndex) {
+                        const groups = Array.isArray(it?._option_groups) ? it._option_groups : [];
+                        const matrix = Array.isArray(it?._variant_matrix) ? it._variant_matrix : null;
+                        if (!matrix?.length) return group?.options || [];
+
+                        const gid = Number(group?.id);
+                        const idx = Number.isFinite(groupIndex) ? groupIndex : groups.findIndex(g => Number(g.id) === gid);
+                        if (idx < 0) return group?.options || [];
+
+                        const selected = this.getSelectedOptionsMapForItem(it);
+                        const beforeGroupIds = groups
+                            .slice(0, Math.max(0, idx))
+                            .map(g => Number(g.id))
+                            .filter(gidBefore => selected[gidBefore]);
+
+                        const validRows = matrix.filter(row => {
+                            const rowMap = row?.options || row || {};
+                            return beforeGroupIds.every(gidBefore => Number(rowMap[gidBefore]) === Number(selected[gidBefore]));
+                        });
+
+                        const validOptionIds = new Set(
+                            validRows
+                                .map(row => Number((row?.options || row || {})[gid]))
+                                .filter(v => Number.isFinite(v))
+                        );
+
+                        if (validOptionIds.size === 0) return group?.options || [];
+
+                        return (group?.options || []).filter(op => validOptionIds.has(Number(op.id)));
+                    },
+
+                    syncDependentSelectionsForItem(it) {
+                        const groups = Array.isArray(it?._option_groups) ? it._option_groups : [];
+                        const matrix = Array.isArray(it?._variant_matrix) ? it._variant_matrix : null;
+                        if (!matrix?.length || groups.length === 0) return;
+
+                        it.options = (it.options && typeof it.options === 'object') ? it.options : {};
+
+                        const selected = this.getSelectedOptionsMapForItem(it);
+
+                        for (let i = 0; i < groups.length; i++) {
+                            const g = groups[i];
+                            const gid = Number(g.id);
+                            const current = selected[gid];
+
+                            if (!current) continue;
+
+                            const validIds = this.getGroupOptionsForItem(it, g, i).map(o => Number(o.id));
+                            if (!validIds.includes(Number(current))) {
+                                for (let j = i; j < groups.length; j++) {
+                                    const gid2 = Number(groups[j].id);
+                                    delete it.options[gid2];
+                                }
+                                break;
+                            }
+                        }
+                    },
+
+                    clampFinishingQty(f) {
+                        let qty = Number(f?.qty || 0);
+                        qty = Number.isFinite(qty) ? qty : 0;
+                        qty = Math.max(0, qty);
+
+                        const min = f?.min_qty === null || f?.min_qty === undefined ? null : Number(f.min_qty);
+                        const max = f?.max_qty === null || f?.max_qty === undefined ? null : Number(f.max_qty);
+
+                        if (min !== null && Number.isFinite(min)) qty = Math.max(qty, min);
+                        if (max !== null && Number.isFinite(max)) qty = Math.min(qty, max);
+
+                        qty = Math.max(1, qty);
+                        f.qty = qty;
+                    },
+
+                    recalcFinishingLine(f) {
+                        const qty = Math.max(0, Number(f?.qty || 0));
+                        const unit = Math.max(0, Number(f?.unit_price || 0));
+                        f.total = Math.max(0, qty * unit);
+                    },
+
+                    onFinishingToggle(it, f) {
+                        if (!f) return;
+                        if (f.selected) {
+                            this.clampFinishingQty(f);
+                            this.recalcFinishingLine(f);
+                        } else {
+                            f.total = 0;
+                        }
+                        this.scheduleQuote(it);
+                    },
+
+                    onFinishingQtyInput(it, f) {
+                        if (!f) return;
+                        this.clampFinishingQty(f);
+                        this.recalcFinishingLine(f);
+                        this.scheduleQuote(it);
+                    },
+
+                    onFinishingUnitPriceInput(_it, f) {
+                        if (!f) return;
+                        f._manual_price = true;
+                        this.clampFinishingQty(f);
+                        this.recalcFinishingLine(f);
+                    },
+
+                    finishingTotalInline(f) {
+                        if (!f || !f.selected) return 0;
+                        const qty = Math.max(0, Number(f.qty || 0));
+                        const unit = Math.max(0, Number(f.unit_price || 0));
+                        if (f.total !== null && f.total !== undefined) {
+                            return Math.max(0, Number(f.total || 0));
+                        }
+                        return Math.max(0, qty * unit);
+                    },
+
+                    lineTotalWithFinishings(it) {
+                        return Math.max(0, Number(it.line_total || 0)) + this.finishingsTotal(it);
+                    },
+
 	                    async loadProducts() {
 	                        // Legacy method retained for backwards compatibility.
 	                        // We now fetch products on-demand (search/lookup) for scale.
@@ -1261,14 +1705,36 @@
                             }
                         }
 
+                        const normalizedDim = (v) => {
+                            if (v === null || v === undefined || v === '') return null;
+                            const n = Number(v);
+                            return Number.isFinite(n) && n > 0 ? n : null;
+                        };
+                        const normalizedUnit = (v) => {
+                            if (typeof v !== 'string') return 'in';
+                            const s = v.trim();
+                            return ['in', 'ft', 'mm', 'cm', 'm'].includes(s) ? s : 'in';
+                        };
+
                         const payload = {
                             working_group_id: Number(this.state.working_group_id),
                             product_id: Number(it.product_id),
                             qty: Number(it.qty || 1),
-                            width: this.requiresDimensions(it) ? Number(it.width || 0) : null,
-                            height: this.requiresDimensions(it) ? Number(it.height || 0) : null,
-                            unit: this.requiresDimensions(it) ? (it.unit || 'in') : null,
+                            width: this.requiresDimensions(it) ? normalizedDim(it.width) : null,
+                            height: this.requiresDimensions(it) ? normalizedDim(it.height) : null,
+                            unit: this.requiresDimensions(it) ? normalizedUnit(it.unit) : null,
                             roll_id: this.requiresDimensions(it) ? (it.roll_choice ? Number(it.roll_choice) : null) : null,
+                            options: (it.options && typeof it.options === 'object') ? it.options : {},
+                            finishings: (() => {
+                                const out = {};
+                                (it.finishings || []).forEach(f => {
+                                    if (!f?.selected) return;
+                                    const fid = Number(f.finishing_product_id || 0);
+                                    const qty = Number(f.qty || 0);
+                                    if (fid > 0 && qty > 0) out[String(fid)] = qty;
+                                });
+                                return out;
+                            })(),
                         };
 
                         try {
@@ -1291,8 +1757,8 @@
 	
 	                            it._pricing_snapshot = q.pricing_snapshot || null;
 
-		                            // Always sync qty-derived fields
-		                            it.qty = q.qty;
+	                            // Always sync qty-derived fields
+	                            it.qty = q.qty;
 
                             // Dimension-related fields
                             it.width = q.width ?? it.width;
@@ -1303,6 +1769,45 @@
                             it.roll_id = q.roll_id ?? it.roll_id; // persist chosen roll (even when choice is Auto)
 	                            it._roll_auto = !!q.roll_auto;
 	                            it._roll_rotated = !!q.roll_rotated;
+
+                                // Variant selection (echo-back)
+                                if (q.options && typeof q.options === 'object') {
+                                    it.options = q.options;
+                                    this.syncDependentSelectionsForItem(it);
+                                }
+
+                                // Finishings pricing lines
+                                if (Array.isArray(q.finishings)) {
+                                    it.finishings = it.finishings || [];
+                                    for (const fr of q.finishings) {
+                                        const fid = Number(fr.finishing_product_id || 0);
+                                        if (!fid) continue;
+                                        const idx = it.finishings.findIndex(x => Number(x.finishing_product_id) === fid);
+
+                                        const prev = idx >= 0 ? it.finishings[idx] : null;
+                                        const manual = !!prev?._manual_price;
+
+                                        const manualUnit = Number(prev?.unit_price || 0);
+                                        const serverQty = Number(fr.qty || 1);
+
+                                        const next = {
+                                            finishing_product_id: fid,
+                                            label: fr.label || (`Finishing #${fid}`),
+                                            selected: true,
+                                            qty: serverQty,
+                                            unit_price: manual ? manualUnit : Number(fr.unit_price || 0),
+                                            total: manual ? Math.max(0, serverQty * manualUnit) : Number(fr.total || 0),
+                                            pricing_snapshot: fr.pricing_snapshot || null,
+                                            is_required: prev?.is_required || false,
+                                            min_qty: prev?.min_qty ?? null,
+                                            max_qty: prev?.max_qty ?? null,
+                                            _manual_price: manual,
+                                        };
+
+                                        if (idx >= 0) it.finishings[idx] = { ...it.finishings[idx], ...next };
+                                        else it.finishings.push(next);
+                                    }
+                                }
 
 	                            // Only set unit_price if admin has not overridden it
 	                            if (!it._manual_price) {
@@ -1320,7 +1825,7 @@
 	                    },
 
                     subtotal() {
-                        return this.state.items.reduce((s, it) => s + Number(it.line_subtotal || 0), 0);
+                        return this.state.items.reduce((s, it) => s + Number(it.line_subtotal || 0) + this.finishingsTotal(it), 0);
                     },
 
 	                    lineDiscountTotal() {
@@ -1355,7 +1860,7 @@
 
 	                    kpiCards() {
 	                        return [
-	                            { key: 'sub', label: 'Subtotal', help: 'Sum of line subtotals', value: () => this.subtotal() },
+	                            { key: 'sub', label: 'Subtotal', help: 'Lines + finishings', value: () => this.subtotal() },
 	                            { key: 'disc', label: 'Discount', help: 'Line + estimate discount', value: () => this.discountTotal() },
 	                            { key: 'tax', label: 'Tax', help: 'Sum of line taxes', value: () => this.taxTotal() },
 	                            { key: 'grand', label: 'Grand Total', help: 'Subtotal - discounts + tax', value: () => this.grandTotal() },
@@ -1402,6 +1907,22 @@
 
                         this.saving = true;
 
+                        const normalizedDim = (v) => {
+                            if (v === null || v === undefined || v === '') return null;
+                            const n = Number(v);
+                            return Number.isFinite(n) && n > 0 ? n : null;
+                        };
+                        const normalizedNonNegative = (v) => {
+                            if (v === null || v === undefined || v === '') return null;
+                            const n = Number(v);
+                            return Number.isFinite(n) && n >= 0 ? n : null;
+                        };
+                        const normalizedUnit = (v) => {
+                            if (typeof v !== 'string') return 'in';
+                            const s = v.trim();
+                            return ['in', 'ft', 'mm', 'cm', 'm'].includes(s) ? s : 'in';
+                        };
+
                         const payload = {
                             ...(this.mode === 'create' ? { working_group_id: Number(this.state.working_group_id) } : {}),
 
@@ -1421,15 +1942,28 @@
 	                            items: this.state.items.map(i => ({
 	                                id: i.id || null,
 	                                product_id: Number(i.product_id),
+	                                options: (i.options && typeof i.options === 'object') ? i.options : {},
 	                                title: i.title || '',
 	                                description: i.description || null,
 	                                qty: Number(i.qty || 0),
-	                                width: this.requiresDimensions(i) ? (i.width === null ? null : Number(i.width)) : null,
-	                                height: this.requiresDimensions(i) ? (i.height === null ? null : Number(i.height)) : null,
-	                                unit: this.requiresDimensions(i) ? (i.unit || 'in') : null,
-	                                area_sqft: i.area_sqft === null ? null : Number(i.area_sqft),
+	                                width: this.requiresDimensions(i) ? normalizedDim(i.width) : null,
+	                                height: this.requiresDimensions(i) ? normalizedDim(i.height) : null,
+	                                unit: this.requiresDimensions(i) ? normalizedUnit(i.unit) : null,
+	                                area_sqft: this.requiresDimensions(i) ? normalizedNonNegative(i.area_sqft) : null,
 	                                offcut_sqft: Number(i.offcut_sqft || 0),
 	                                roll_id: i.roll_id ? Number(i.roll_id) : null,
+	                                finishings: (i.finishings || [])
+	                                    .filter(f => f && f.selected && Number(f.finishing_product_id || 0) > 0)
+	                                    .map(f => ({
+	                                        finishing_product_id: Number(f.finishing_product_id),
+	                                        label: f.label || (`Finishing #${f.finishing_product_id}`),
+	                                        qty: Number(f.qty || 1),
+	                                        unit_price: Number(f.unit_price || 0),
+	                                        total: (f.total !== null && f.total !== undefined)
+	                                            ? Number(f.total || 0)
+	                                            : (Number(f.qty || 1) * Number(f.unit_price || 0)),
+	                                        pricing_snapshot: f.pricing_snapshot || null,
+	                                    })),
 	                                pricing_snapshot: i._pricing_snapshot || i.pricing_snapshot || null,
 	                                unit_price: Number(i.unit_price || 0),
 	                                line_subtotal: Number(i.line_subtotal || 0),

@@ -482,36 +482,63 @@
                     </tr>
                 </thead>
                 <tbody>
-                    @foreach ($estimate->items as $idx => $it)
-                        <tr>
-                            <td class="muted">{{ $idx + 1 }}</td>
-                            <td>
-                                <div class="item-title">{{ $it->title }}</div>
+	                    @foreach ($estimate->items as $idx => $it)
+	                        @php
+	                            $finTotal = (float) ($it->finishings?->sum('total') ?? 0);
+	                            $variantLabel = (string) (data_get($it->pricing_snapshot, 'variant_label') ?? '');
+	                            if ($variantLabel === '' && $it->variantSetItem) {
+	                                $g = $it->variantSetItem->option?->group?->name;
+	                                $o = $it->variantSetItem->option?->label;
+	                                $variantLabel = trim(($g ? ($g . ': ') : '') . ($o ?: ''));
+	                            }
+	                            $lineSubtotalWithFin = (float) ($it->line_subtotal ?? 0) + $finTotal;
+	                            $lineTotalWithFin = (float) ($it->line_total ?? 0) + $finTotal;
+	                        @endphp
+	                        <tr>
+	                            <td class="muted">{{ $idx + 1 }}</td>
+	                            <td>
+	                                <div class="item-title">{{ $it->title }}</div>
 
                                 @if ($it->description)
                                     <div class="item-desc">{{ $it->description }}</div>
                                 @endif
 
-                                <div style="margin-top:6px;">
-                                    @if ($it->roll)
-                                        <span class="pill">Roll: {{ $it->roll->name ?? '#' . $it->roll_id }}</span>
-                                    @endif
+	                                <div style="margin-top:6px;">
+	                                    @if ($it->roll)
+	                                        <span class="pill">Roll: {{ $it->roll->name ?? '#' . $it->roll_id }}</span>
+	                                    @endif
+	                                    @if ($variantLabel !== '')
+	                                        <span class="pill">Variant: {{ $variantLabel }}</span>
+	                                    @endif
+	 
+	                                    {{-- Add more pills later if you want:
+	                                     Variant, dimensions, finishing count, etc. --}}
+	                                </div>
 
-                                    {{-- Add more pills later if you want:
-                                     Variant, dimensions, finishing count, etc. --}}
-                                </div>
-                            </td>
+	                                @if ($it->finishings?->count())
+	                                    <div class="muted" style="margin-top:6px; font-size:10px; line-height:1.4;">
+	                                        <div style="font-weight:700; color:#475569;">Finishings</div>
+	                                        @foreach ($it->finishings as $f)
+	                                            <div>
+	                                                - {{ $f->label ?? ($f->option?->label ?? ('Finishing #' . $f->finishing_product_id)) }}
+	                                                × {{ (int) ($f->qty ?? 1) }}
+	                                                ({{ $currency }} {{ number_format((float) ($f->total ?? 0), 2) }})
+	                                            </div>
+	                                        @endforeach
+	                                    </div>
+	                                @endif
+	                            </td>
 
                             <td class="num">{{ rtrim(rtrim(number_format((float) $it->qty, 2), '0'), '.') }}</td>
                             <td class="num">{{ number_format((float) $it->unit_price, 2) }}</td>
-                            <td class="num">{{ number_format((float) $it->line_subtotal, 2) }}</td>
-                            <td class="num">{{ number_format((float) ($it->discount_amount ?? 0), 2) }}</td>
-                            <td class="num">{{ number_format((float) ($it->tax_amount ?? 0), 2) }}</td>
-                            <td class="num" style="font-weight:900;">{{ number_format((float) $it->line_total, 2) }}
-                            </td>
-                        </tr>
-                    @endforeach
-                </tbody>
+	                            <td class="num">{{ number_format((float) $lineSubtotalWithFin, 2) }}</td>
+	                            <td class="num">{{ number_format((float) ($it->discount_amount ?? 0), 2) }}</td>
+	                            <td class="num">{{ number_format((float) ($it->tax_amount ?? 0), 2) }}</td>
+	                            <td class="num" style="font-weight:900;">{{ number_format((float) $lineTotalWithFin, 2) }}
+	                            </td>
+	                        </tr>
+	                    @endforeach
+	                </tbody>
             </table>
         </div>
 

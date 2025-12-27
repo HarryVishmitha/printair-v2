@@ -317,8 +317,11 @@
                         </td>
                         <td class="right">{{ (int) $it->qty }}</td>
                         <td class="right">{{ $currency }} {{ number_format((float) $it->unit_price, 2) }}</td>
-                        <td class="right" style="font-weight: 900;">{{ $currency }} {{ number_format((float) $it->line_total, 2) }}
-                        </td>
+                        @php
+                            $finTotal = (float) ($it->relationLoaded('finishings') ? $it->finishings->sum('total') : 0);
+                            $lineWithFin = (float) ($it->line_total ?? 0) + $finTotal;
+                        @endphp
+                        <td class="right" style="font-weight: 900;">{{ $currency }} {{ number_format($lineWithFin, 2) }}</td>
                     </tr>
                 @endforeach
             </tbody>
@@ -381,4 +384,3 @@
 </body>
 
 </html>
-

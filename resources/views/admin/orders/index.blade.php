@@ -16,14 +16,17 @@
             'working_group_id' => (string) request('working_group_id', ''),
         ];
 
+        $rowTotal = fn ($o) => (float) ($o->final_grand_total ?? $o->grand_total ?? 0);
+        $rows = $orders->getCollection();
+
         // Calculate KPIs
         $kpis = [
             'total' => $orders->total(),
             'confirmed' => $orders->where('status', 'confirmed')->count(),
             'processing' => $orders->where('status', 'processing')->count(),
             'completed' => $orders->where('status', 'completed')->count(),
-            'total_value' => $orders->sum('grand_total'),
-            'unpaid_value' => $orders->where('payment_status', '!=', 'paid')->sum('grand_total'),
+            'total_value' => $rows->sum($rowTotal),
+            'unpaid_value' => $rows->where('payment_status', '!=', 'paid')->sum($rowTotal),
             'currency' => $orders->first()->currency ?? 'LKR',
         ];
     @endphp
@@ -335,7 +338,7 @@
                                 @php
                                     $paymentColors = [
                                         'unpaid' => 'bg-rose-100 border-rose-300 text-rose-700',
-                                        'partially_paid' => 'bg-amber-100 border-amber-300 text-amber-700',
+                                        'partial' => 'bg-amber-100 border-amber-300 text-amber-700',
                                         'paid' => 'bg-emerald-100 border-emerald-300 text-emerald-700',
                                         'refunded' => 'bg-slate-100 border-slate-300 text-slate-700',
                                     ];
@@ -348,7 +351,7 @@
                             </td>
                             <td class="px-5 py-4 text-right">
                                 <div class="font-extrabold text-slate-900">
-                                    {{ $o->currency ?? 'LKR' }} {{ number_format((float) $o->grand_total, 2) }}
+                                    {{ $o->currency ?? 'LKR' }} {{ number_format((float) ($o->final_grand_total ?? $o->grand_total), 2) }}
                                 </div>
                             </td>
                             <td class="px-5 py-4 text-right">
@@ -388,4 +391,3 @@
         </div>
     </div>
 </x-app-layout>
-

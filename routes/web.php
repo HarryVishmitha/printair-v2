@@ -19,10 +19,11 @@ use App\Http\Controllers\Public\CheckoutPageController;
 use App\Http\Controllers\Public\CustomerAddressController;
 use App\Http\Controllers\Public\InvoicePublicController;
 use App\Http\Controllers\Public\OrderPublicController;
+use App\Http\Middleware\EnsureCartNotEmpty;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
-Route::get('/home', [HomeController::class, 'index'])->name('home');
+Route::get('/home', [HomeController::class, 'index'])->name('home.home');
 Route::get('/about-us', [HomeController::class, 'about'])->name('about');
 Route::get('/terms-and-conditions', [HomeController::class, 'terms'])->name('terms');
 Route::get('/privacy-policy', [HomeController::class, 'privacy'])->name('privacy');
@@ -46,7 +47,9 @@ Route::post('/contact', [PageController::class, 'sendContact'])
 Route::get('/quote', [HomeController::class, 'quote'])->name('quotes');
 Route::get('/quote/create', [HomeController::class, 'quote'])->name('quotes.create');
 
-Route::get('/checkout', [CheckoutPageController::class, 'index'])->name('checkout.page');
+Route::get('/checkout', [CheckoutPageController::class, 'index'])
+    ->middleware([EnsureCartNotEmpty::class])
+    ->name('checkout.page');
 
 // ------------------------------
 // Cart + Checkout (Public)
@@ -79,7 +82,7 @@ Route::prefix('cart')->name('cart.')->group(function () {
         ->name('guest.items.delete');
 });
 
-Route::prefix('checkout')->name('checkout.')->group(function () {
+Route::prefix('checkout')->name('checkout.')->middleware([EnsureCartNotEmpty::class])->group(function () {
     Route::post('/guest/start', [CheckoutController::class, 'startGuest'])->name('guest.start');
     Route::post('/guest/verify', [CheckoutController::class, 'verifyGuestOtp'])->name('guest.verify');
     Route::post('/place-order', [CheckoutController::class, 'placeOrder'])->name('place');
@@ -308,6 +311,8 @@ Route::prefix('admin')
 	    Route::post('/estimates', [EstimateController::class, 'store'])->name('estimates.store');
 	    Route::get('/estimates/products', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'products'])->name('estimates.products');
 	    Route::get('/estimates/products/{product}/rolls', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'rolls'])->name('estimates.products.rolls');
+	    Route::get('/estimates/products/{product}/variants', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'variants'])->name('estimates.products.variants');
+	    Route::get('/estimates/products/{product}/finishings', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'finishings'])->name('estimates.products.finishings');
 	    Route::post('/estimates/quote', [\App\Http\Controllers\Admin\EstimatePricingController::class, 'quote'])->name('estimates.quote');
 	    Route::get('/estimates/customer-users', [\App\Http\Controllers\Admin\EstimateCustomerController::class, 'userSearch'])->name('estimates.customer-users');
 	    Route::post('/estimates/customers', [\App\Http\Controllers\Admin\EstimateCustomerController::class, 'store'])->name('estimates.customers.store');
@@ -332,21 +337,28 @@ Route::prefix('admin')
 
     // Orders
     Route::get('/orders', [OrderController::class, 'index'])->name('orders.index');
+    Route::get('/orders/create', [OrderController::class, 'create'])->name('orders.create');
+    Route::post('/orders', [OrderController::class, 'store'])->name('orders.store');
     Route::get('/orders/{order}', [OrderController::class, 'show'])->name('orders.show');
+    Route::get('/orders/{order}/edit', [OrderController::class, 'edit'])->name('orders.edit');
+    Route::patch('/orders/{order}', [OrderController::class, 'update'])->name('orders.update');
     Route::post('/estimates/{estimate}/convert-to-order', [OrderController::class, 'createFromEstimate'])->name('orders.from-estimate');
     Route::post('/orders/{order}/confirm', [OrderController::class, 'confirm'])->name('orders.confirm');
     Route::post('/orders/{order}/status', [OrderController::class, 'changeStatus'])->name('orders.status');
     Route::get('/orders/{order}/status-options', [OrderController::class, 'statusOptions'])->name('orders.status-options');
 
-    // Billing (Invoices + Payments)
-    Route::post('/orders/{order}/invoices', [BillingController::class, 'createInvoiceFromOrder'])->name('invoices.from-order');
-    Route::get('/invoices', [BillingController::class, 'invoicesIndex'])->name('invoices.index');
-    Route::get('/invoices/{invoice}', [BillingController::class, 'showInvoice'])->name('invoices.show');
-    Route::post('/invoices/{invoice}/issue', [BillingController::class, 'issueInvoice'])->name('invoices.issue');
-    Route::post('/invoices/{invoice}/void', [BillingController::class, 'voidInvoice'])->name('invoices.void');
-    Route::post('/invoices/{invoice}/payments', [BillingController::class, 'addInvoicePayment'])->name('invoices.payments.add');
-    Route::get('/invoices/{invoice}/pdf', [InvoiceDocumentController::class, 'pdf'])->name('invoices.pdf');
-    Route::post('/invoices/{invoice}/email', [InvoiceDocumentController::class, 'email'])->name('invoices.email');
+	    // Billing (Invoices + Payments)
+	    Route::post('/orders/{order}/invoices', [BillingController::class, 'createInvoiceFromOrder'])->name('invoices.from-order');
+	    Route::get('/invoices', [BillingController::class, 'invoicesIndex'])->name('invoices.index');
+	    Route::get('/invoices/{invoice}', [BillingController::class, 'showInvoice'])->name('invoices.show');
+	    Route::get('/invoices/{invoice}/edit', [BillingController::class, 'editInvoice'])->name('invoices.edit');
+	    Route::patch('/invoices/{invoice}', [BillingController::class, 'updateInvoice'])->name('invoices.update');
+	    Route::post('/invoices/{invoice}/issue', [BillingController::class, 'issueInvoice'])->name('invoices.issue');
+	    Route::post('/invoices/{invoice}/void', [BillingController::class, 'voidInvoice'])->name('invoices.void');
+	    Route::post('/invoices/{invoice}/payments', [BillingController::class, 'addInvoicePayment'])->name('invoices.payments.add');
+	    Route::post('/invoices/{invoice}/payments/mark-paid', [BillingController::class, 'markInvoicePaid'])->name('invoices.payments.mark-paid');
+	    Route::get('/invoices/{invoice}/pdf', [InvoiceDocumentController::class, 'pdf'])->name('invoices.pdf');
+	    Route::post('/invoices/{invoice}/email', [InvoiceDocumentController::class, 'email'])->name('invoices.email');
 
     Route::post('/payments', [BillingController::class, 'recordPayment'])->name('payments.store');
     Route::get('/payments', [BillingController::class, 'paymentsIndex'])->name('payments.index');

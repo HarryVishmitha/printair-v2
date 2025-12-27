@@ -382,6 +382,20 @@
                             </button>
                         </form>
                     @endcan
+
+                    @can('update', $order)
+                        <a href="{{ route('admin.orders.edit', $order) }}"
+                            class="inline-flex items-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-md shadow-black/10 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2"
+                                stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" />
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M19.5 7.125L16.862 4.487" />
+                            </svg>
+                            Edit Order
+                        </a>
+                    @endcan
                 </div>
             </div>
         </section>
@@ -391,13 +405,23 @@
             <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
                 <div class="flex items-start justify-between">
                     <div>
-                        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Estimated Total</p>
+                        <p class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            {{ !is_null($order->final_grand_total) ? 'Final Total' : 'Estimated Total' }}
+                        </p>
                         <p class="mt-2 text-2xl font-black text-indigo-600">
-                            {{ $currency }} {{ number_format((float) $order->grand_total, 2) }}
+                            {{ $currency }} {{ number_format((float) ($order->final_grand_total ?? $order->grand_total), 2) }}
                         </p>
                         <p class="mt-1 text-xs text-slate-500">
                             Live estimate. Final total is set when an invoice is issued.
                         </p>
+                        @if (!is_null($order->final_grand_total))
+                            <p class="mt-2 text-xs text-slate-700">
+                                <span class="font-semibold">Estimated:</span>
+                                <span class="font-extrabold text-slate-900">
+                                    {{ $currency }} {{ number_format((float) $order->grand_total, 2) }}
+                                </span>
+                            </p>
+                        @endif
                         @if ($finalInvoiceIssued)
                             <p class="mt-2 text-xs text-slate-700">
                                 <span class="font-semibold">Final invoice:</span>
@@ -841,7 +865,11 @@
                                         </td>
                                         <td class="px-6 py-4 text-right align-top">
                                             <div class="text-base font-extrabold text-slate-900 whitespace-nowrap">
-                                                {{ $currency }} {{ number_format((float) $it->line_total, 2) }}
+                                                @php
+                                                    $finTotal = (float) ($it->finishings?->sum('total') ?? 0);
+                                                    $lineWithFin = (float) ($it->line_total ?? 0) + $finTotal;
+                                                @endphp
+                                                {{ $currency }} {{ number_format($lineWithFin, 2) }}
                                             </div>
                                         </td>
                                     </tr>
@@ -857,6 +885,18 @@
                                         </div>
                                     </td>
                                 </tr>
+                                @if (!is_null($order->final_grand_total))
+                                    <tr>
+                                        <td colspan="2"
+                                            class="px-6 py-3 text-right text-sm font-black text-slate-900">Final Total:</td>
+                                        <td class="px-6 py-3 text-right">
+                                            <div class="text-lg font-black text-slate-900 whitespace-nowrap">
+                                                {{ $currency }}
+                                                {{ number_format((float) $order->final_grand_total, 2) }}
+                                            </div>
+                                        </td>
+                                    </tr>
+                                @endif
                                 @if ($finalInvoiceIssued)
                                     <tr>
                                         <td colspan="2"

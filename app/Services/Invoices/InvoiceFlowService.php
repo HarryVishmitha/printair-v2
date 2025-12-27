@@ -71,6 +71,8 @@ class InvoiceFlowService
 
                 'currency' => $order->currency,
 
+                'due_at' => now()->addDays(14),
+
                 'subtotal' => $order->subtotal,
                 'discount_total' => $order->discount_total,
                 'tax_total' => $order->tax_total,
@@ -178,6 +180,7 @@ class InvoiceFlowService
                 'status' => 'issued',
                 'issued_at' => now(),
                 'locked_at' => now(),
+                'locked_by' => $actor->id,
                 'updated_by' => $actor->id,
             ];
 
@@ -206,6 +209,26 @@ class InvoiceFlowService
             }
 
             $invoice->update($updates);
+
+            // Freeze final order total when final invoice is issued.
+            if ($invoice->type === 'final' && Schema::hasColumn('orders', 'final_grand_total')) {
+                $order = Order::query()->whereKey($invoice->order_id)->lockForUpdate()->first();
+                if ($order) {
+                    $orderUpdates = [
+                        'final_grand_total' => $invoice->grand_total,
+                        'updated_by' => $actor->id,
+                    ];
+
+                    if (Schema::hasColumn('orders', 'locked_at')) {
+                        $orderUpdates['locked_at'] = $order->locked_at ?? now();
+                    }
+                    if (Schema::hasColumn('orders', 'locked_by')) {
+                        $orderUpdates['locked_by'] = $order->locked_by ?? $actor->id;
+                    }
+
+                    $order->update($orderUpdates);
+                }
+            }
 
             $this->logStatusChange($invoice, $from, 'issued', $actor, $meta['reason'] ?? 'Invoice issued', $meta);
             $this->activity('invoice.issued', $actor, $invoice, $meta);

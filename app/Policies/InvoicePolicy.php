@@ -12,6 +12,19 @@ class InvoicePolicy
         return $this->inSameWorkingGroup($user, $invoice->working_group_id);
     }
 
+    public function update(User $user, Invoice $invoice): bool
+    {
+        if (! $this->inSameWorkingGroup($user, $invoice->working_group_id)) return false;
+
+        // edit only draft invoices
+        if ($invoice->status !== 'draft') return false;
+
+        // if issued, invoice gets locked_at; but keep explicit anyway
+        if ($invoice->locked_at) return false;
+
+        return $user->can('manage-orderFlow');
+    }
+
     public function issue(User $user, Invoice $invoice): bool
     {
         if (! $this->inSameWorkingGroup($user, $invoice->working_group_id)) return false;

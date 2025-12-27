@@ -16,6 +16,9 @@ class UpsertEstimateItemRequest extends FormRequest
     {
         return [
             'product_id' => ['required', 'integer'],
+            'options' => ['nullable', 'array', 'max:60'],
+            'options.*' => ['nullable', 'integer'],
+            // Back-compat (older UI)
             'variant_set_item_id' => ['nullable', 'integer'],
             'roll_id' => ['nullable', 'integer'],
 
@@ -41,4 +44,3 @@ class UpsertEstimateItemRequest extends FormRequest
         ];
     }
 }
-

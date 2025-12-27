@@ -17,7 +17,9 @@ class EstimatePdfService
             'workingGroup',
             'customer',
             'items.product',
+            'items.variantSetItem.option.group',
             'items.roll',
+            'items.finishings',
         ]);
 
         $html = view('pdf.estimate', [

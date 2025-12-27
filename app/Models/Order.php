@@ -29,6 +29,7 @@ class Order extends Model
         'shipping_fee' => 'decimal:2',
         'other_fee' => 'decimal:2',
         'grand_total' => 'decimal:2',
+        'final_grand_total' => 'decimal:2',
 
         'ordered_at' => 'datetime',
         'confirmed_at' => 'datetime',

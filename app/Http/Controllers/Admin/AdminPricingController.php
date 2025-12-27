@@ -628,13 +628,16 @@ class AdminPricingController extends Controller
                     ->first();
 
                 $payload = [
-                    'base_price' => $data['base_price'] ?? null,
-                    'rate_per_sqft' => $data['rate_per_sqft'] ?? null,
-                    'offcut_rate_per_sqft' => $data['offcut_rate_per_sqft'] ?? null,
-                    'min_charge' => $data['min_charge'] ?? null,
-
                     'updated_by' => Auth::user()?->id,
                 ];
+
+                // Only update pricing fields that were actually sent by the client.
+                // (Prevents accidentally nulling fields when UI submits partial payloads.)
+                foreach (['base_price', 'rate_per_sqft', 'offcut_rate_per_sqft', 'min_charge'] as $k) {
+                    if (array_key_exists($k, $data)) {
+                        $payload[$k] = $data[$k];
+                    }
+                }
 
                 if ($context === 'working_group') {
                     if (array_key_exists('override_base', $data)) {
@@ -645,6 +648,21 @@ class AdminPricingController extends Controller
                     }
                     if (array_key_exists('override_finishings', $data)) {
                         $payload['override_finishings'] = (bool) $data['override_finishings'];
+                    }
+
+                    // Common admin expectation: if you're editing WG base pricing fields,
+                    // you intend to use WG base pricing for quoting.
+                    if (!array_key_exists('override_base', $data)) {
+                        $touchedBase = false;
+                        foreach (['base_price', 'rate_per_sqft', 'offcut_rate_per_sqft', 'min_charge'] as $k) {
+                            if (array_key_exists($k, $data)) {
+                                $touchedBase = true;
+                                break;
+                            }
+                        }
+                        if ($touchedBase) {
+                            $payload['override_base'] = true;
+                        }
                     }
                 }
 

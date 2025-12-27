@@ -7,9 +7,29 @@ use App\Models\User;
 
 class OrderPolicy
 {
+    public function create(User $user): bool
+    {
+        return $user->can('manage-orderFlow');
+    }
+
     public function view(User $user, Order $order): bool
     {
         return $this->inSameWorkingGroup($user, $order->working_group_id);
+    }
+
+    public function update(User $user, Order $order): bool
+    {
+        if (! $this->inSameWorkingGroup($user, $order->working_group_id)) return false;
+
+        if (! $user->can('manage-orderFlow')) return false;
+
+        // Order editing is allowed until an invoice is issued (draft invoices don't block).
+        $hasIssuedInvoice = $order->invoices()
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', ['draft', 'void', 'refunded'])
+            ->exists();
+
+        return ! $hasIssuedInvoice;
     }
 
     public function confirm(User $user, Order $order): bool

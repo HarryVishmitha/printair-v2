@@ -13,6 +13,7 @@
             csrf: @js(csrf_token()),
             jsonUrl: @js(route('cart.show') . '?json=1'),
             productQuoteBaseUrl: @js(url('/products')),
+            initialToast: @js(session('toast')),
             endpoints: {
                 saveUrlDb: @js(route('cart.items.artwork.url', ['item' => 0])),
                 uploadDb: @js(route('cart.items.artwork.upload', ['item' => 0])),
@@ -40,6 +41,11 @@
             </div>
 
             <a :href="endpoints.checkout"
+               @click.prevent="
+                    if (loading) return;
+                    if ((items || []).length === 0) return setToast('error', 'Your cart is empty. Please add products to cart first.');
+                    window.location.href = endpoints.checkout;
+               "
                class="inline-flex items-center gap-2 rounded-xl bg-[#ef233c] px-4 py-2 text-xs font-extrabold text-white hover:opacity-95">
                 <span class="iconify" data-icon="mdi:cart-check"></span>
                 Checkout
@@ -450,11 +456,13 @@
     </div>
 
     <script>
-        function printairCart({ csrf, jsonUrl, productQuoteBaseUrl, endpoints, isAuthed }) {
+        function printairCart({ csrf, jsonUrl, productQuoteBaseUrl, endpoints, isAuthed, initialToast }) {
             return {
                 csrf, jsonUrl, productQuoteBaseUrl, endpoints, isAuthed,
                 loading: true,
-                toast: { type: null, message: null },
+                toast: (initialToast && initialToast.message)
+                    ? { type: initialToast.type || 'error', message: initialToast.message }
+                    : { type: null, message: null },
                 items: [],
                 saveTimers: {},
 

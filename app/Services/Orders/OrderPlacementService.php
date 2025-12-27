@@ -7,9 +7,12 @@ use App\Models\Customer;
 use App\Models\Order;
 use App\Models\OrderItem;
 use App\Models\OrderItemFinishing;
+use App\Models\Product;
+use App\Models\ProductFinishingLink;
 use App\Models\User;
 use App\Notifications\NewOrderSubmitted;
 use App\Services\Cart\CartService;
+use App\Services\Pricing\PricingResolverService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Mail;
@@ -18,7 +21,10 @@ use Illuminate\Validation\ValidationException;
 
 class OrderPlacementService
 {
-    public function __construct(private CartService $cart) {}
+    public function __construct(
+        private CartService $cart,
+        private PricingResolverService $pricing,
+    ) {}
 
     public function placeDraft(array $payload): Order
     {
@@ -121,8 +127,7 @@ class OrderPlacementService
         $qty = max(1, (int) ($ci->qty ?? 1));
         $snapshot = is_array($ci->pricing_snapshot) ? $ci->pricing_snapshot : [];
 
-        $lineTotal = $this->extractLineTotal($snapshot, $qty);
-        $unitPrice = $qty > 0 ? round($lineTotal / $qty, 2) : 0.0;
+        $grossTotal = $this->extractGrossTotal($snapshot, $qty);
 
         $title = $ci->product?->name ?? ('Product #'.$ci->product_id);
         $desc = $ci->notes ?: null;
@@ -145,6 +150,24 @@ class OrderPlacementService
 
         $snapshot['meta'] = $meta ?: null;
 
+        $product = $ci->product instanceof Product
+            ? $ci->product
+            : Product::query()->whereKey((int) $ci->product_id)->first();
+
+        $finishingsMap = $ci->finishings
+            ? $ci->finishings->mapWithKeys(fn ($f) => [(int) $f->finishing_product_id => (int) $f->qty])->all()
+            : [];
+
+        $fin = $product ? $this->quoteFinishings($order->working_group_id, $product, $finishingsMap) : ['rows' => [], 'total' => 0.0];
+        $finishingsTotal = (float) ($fin['total'] ?? 0.0);
+
+        if ($finishingsTotal > 0 && $grossTotal < $finishingsTotal) {
+            $grossTotal = $finishingsTotal;
+        }
+
+        $lineSubtotal = max(0.0, round($grossTotal - $finishingsTotal, 2));
+        $unitPrice = $qty > 0 ? round($lineSubtotal / $qty, 2) : 0.0;
+
         /** @var \App\Models\OrderItem $oi */
         $oi = OrderItem::create([
             'order_id' => $order->id,
@@ -166,31 +189,35 @@ class OrderPlacementService
             'offcut_sqft' => $ci->offcut_sqft ?? 0,
 
             'unit_price' => $unitPrice,
-            'line_subtotal' => $lineTotal,
+            'line_subtotal' => $lineSubtotal,
             'discount_amount' => 0,
             'tax_amount' => 0,
-            'line_total' => $lineTotal,
+            'line_total' => $lineSubtotal,
 
-            'pricing_snapshot' => $snapshot ?: [],
+            'pricing_snapshot' => array_merge($snapshot ?: [], [
+                'source' => 'checkout.order_placement',
+                'stored_at' => now()->toISOString(),
+                'line_subtotal' => $lineSubtotal,
+                'finishings_total' => round($finishingsTotal, 2),
+                'total' => round($grossTotal, 2),
+            ]),
             'sort_order' => $sortOrder,
         ]);
 
-        foreach ($ci->finishings as $f) {
-            $finishingName = $f->finishingProduct?->name ?? 'Finishing';
-
+        foreach (($fin['rows'] ?? []) as $row) {
             OrderItemFinishing::create([
                 'order_item_id' => $oi->id,
-                'finishing_product_id' => $f->finishing_product_id,
+                'finishing_product_id' => (int) $row['finishing_product_id'],
                 'option_id' => null,
-                'label' => $finishingName,
-                'qty' => (int) ($f->qty ?? 1),
-                'unit_price' => 0,
-                'total' => 0,
-                'pricing_snapshot' => $f->pricing_snapshot ?? null,
+                'label' => (string) ($row['label'] ?? 'Finishing'),
+                'qty' => (int) $row['qty'],
+                'unit_price' => number_format((float) ($row['unit_price'] ?? 0), 2, '.', ''),
+                'total' => number_format((float) ($row['total'] ?? 0), 2, '.', ''),
+                'pricing_snapshot' => $row['pricing_snapshot'] ?? null,
             ]);
         }
 
-        return (float) $lineTotal;
+        return (float) $grossTotal;
     }
 
     private function copySessionCartItemToOrder(Order $order, array $ci, int $sortOrder): float
@@ -198,8 +225,7 @@ class OrderPlacementService
         $qty = max(1, (int) ($ci['qty'] ?? 1));
         $snapshot = is_array($ci['pricing_snapshot'] ?? null) ? $ci['pricing_snapshot'] : [];
 
-        $lineTotal = $this->extractLineTotal($snapshot, $qty);
-        $unitPrice = $qty > 0 ? round($lineTotal / $qty, 2) : 0.0;
+        $grossTotal = $this->extractGrossTotal($snapshot, $qty);
 
         $title = (string) ($ci['title'] ?? '');
         if ($title === '') {
@@ -215,6 +241,24 @@ class OrderPlacementService
             $meta['artwork_external_url'] = $metaFromItem['artwork_external_url'];
         }
         $snapshot['meta'] = $meta ?: null;
+
+        $productId = (int) ($ci['product_id'] ?? 0);
+        $product = $productId > 0 ? Product::query()->whereKey($productId)->first() : null;
+
+        $finishingsMap = is_array($metaFromItem['finishings'] ?? null) ? (array) $metaFromItem['finishings'] : [];
+        if (empty($finishingsMap) && is_array(data_get($snapshot, 'input.finishings'))) {
+            $finishingsMap = (array) data_get($snapshot, 'input.finishings');
+        }
+
+        $fin = $product ? $this->quoteFinishings($order->working_group_id, $product, $finishingsMap) : ['rows' => [], 'total' => 0.0];
+        $finishingsTotal = (float) ($fin['total'] ?? 0.0);
+
+        if ($finishingsTotal > 0 && $grossTotal < $finishingsTotal) {
+            $grossTotal = $finishingsTotal;
+        }
+
+        $lineSubtotal = max(0.0, round($grossTotal - $finishingsTotal, 2));
+        $unitPrice = $qty > 0 ? round($lineSubtotal / $qty, 2) : 0.0;
 
         /** @var \App\Models\OrderItem $oi */
         $oi = OrderItem::create([
@@ -237,24 +281,45 @@ class OrderPlacementService
             'offcut_sqft' => $ci['offcut_sqft'] ?? 0,
 
             'unit_price' => $unitPrice,
-            'line_subtotal' => $lineTotal,
+            'line_subtotal' => $lineSubtotal,
             'discount_amount' => 0,
             'tax_amount' => 0,
-            'line_total' => $lineTotal,
+            'line_total' => $lineSubtotal,
 
-            'pricing_snapshot' => $snapshot ?: [],
+            'pricing_snapshot' => array_merge($snapshot ?: [], [
+                'source' => 'checkout.order_placement',
+                'stored_at' => now()->toISOString(),
+                'line_subtotal' => $lineSubtotal,
+                'finishings_total' => round($finishingsTotal, 2),
+                'total' => round($grossTotal, 2),
+            ]),
             'sort_order' => $sortOrder,
         ]);
 
-        $finishingsMap = [];
-        $metaFromItem = is_array($ci['meta'] ?? null) ? $ci['meta'] : [];
-        if (is_array($metaFromItem['finishings'] ?? null)) {
-            $finishingsMap = $metaFromItem['finishings'];
-        } elseif (is_array(data_get($snapshot, 'input.finishings'))) {
-            $finishingsMap = (array) data_get($snapshot, 'input.finishings');
+        foreach (($fin['rows'] ?? []) as $row) {
+            OrderItemFinishing::create([
+                'order_item_id' => $oi->id,
+                'finishing_product_id' => (int) $row['finishing_product_id'],
+                'option_id' => null,
+                'label' => (string) ($row['label'] ?? 'Finishing'),
+                'qty' => (int) $row['qty'],
+                'unit_price' => number_format((float) ($row['unit_price'] ?? 0), 2, '.', ''),
+                'total' => number_format((float) ($row['total'] ?? 0), 2, '.', ''),
+                'pricing_snapshot' => $row['pricing_snapshot'] ?? null,
+            ]);
         }
 
-        $finishingIds = collect($finishingsMap)
+        return (float) $grossTotal;
+    }
+
+    private function quoteFinishings(int $workingGroupId, Product $product, array $finishingsInput): array
+    {
+        $finishingsInput = is_array($finishingsInput) ? $finishingsInput : [];
+        if (count($finishingsInput) === 0) {
+            return ['rows' => [], 'total' => 0.0];
+        }
+
+        $requestedIds = collect($finishingsInput)
             ->keys()
             ->map(fn ($k) => is_numeric($k) ? (int) $k : 0)
             ->filter(fn ($id) => $id > 0)
@@ -262,48 +327,121 @@ class OrderPlacementService
             ->values()
             ->all();
 
-        if (count($finishingIds) > 0) {
-            $names = \App\Models\Product::query()
-                ->whereIn('id', $finishingIds)
-                ->pluck('name', 'id')
-                ->all();
-
-            foreach ($finishingsMap as $fid => $qtyRaw) {
-                $fid = is_numeric($fid) ? (int) $fid : 0;
-                if ($fid <= 0) {
-                    continue;
-                }
-
-                $qty = is_numeric($qtyRaw) ? (int) $qtyRaw : 0;
-                if ($qty <= 0) {
-                    continue;
-                }
-
-                $label = (string) ($names[$fid] ?? 'Finishing');
-
-                OrderItemFinishing::create([
-                    'order_item_id' => $oi->id,
-                    'finishing_product_id' => $fid,
-                    'option_id' => null,
-                    'label' => $label,
-                    'qty' => $qty,
-                    'unit_price' => 0,
-                    'total' => 0,
-                    'pricing_snapshot' => null,
-                ]);
-            }
+        if (count($requestedIds) === 0) {
+            return ['rows' => [], 'total' => 0.0];
         }
 
-        return (float) $lineTotal;
+        $validIds = ProductFinishingLink::query()
+            ->where('product_id', $product->id)
+            ->where('is_active', true)
+            ->whereIn('finishing_product_id', $requestedIds)
+            ->pluck('finishing_product_id')
+            ->all();
+
+        if (count($validIds) === 0) {
+            return ['rows' => [], 'total' => 0.0];
+        }
+
+        $finishingProductsById = Product::query()
+            ->whereIn('id', $validIds)
+            ->get(['id', 'name', 'status', 'product_type'])
+            ->keyBy('id');
+
+        $rp = $this->pricing->resolve($product, $workingGroupId);
+
+        $rows = [];
+        $total = 0.0;
+
+        foreach ($validIds as $fid) {
+            $requestedQty = $finishingsInput[(string) $fid] ?? ($finishingsInput[$fid] ?? 0);
+            $requestedQty = is_numeric($requestedQty) ? (int) $requestedQty : 0;
+            if ($requestedQty <= 0) {
+                continue;
+            }
+
+            $unit = null;
+            $line = null;
+            $mode = null;
+
+            $usedFallback = true;
+
+            if ($rp) {
+                $fp = $this->pricing->finishingPricing($rp, (int) $fid);
+                if ($fp && $fp->is_active) {
+                    if ($fp->price_per_piece !== null) {
+                        $unit = (float) $fp->price_per_piece;
+                        $line = $unit * $requestedQty;
+                        $mode = 'per_piece';
+                        $usedFallback = false;
+                    } elseif ($fp->price_per_side !== null) {
+                        $unit = (float) $fp->price_per_side;
+                        $line = $unit * $requestedQty;
+                        $mode = 'per_side';
+                        $usedFallback = false;
+                    } elseif ($fp->flat_price !== null) {
+                        $unit = (float) $fp->flat_price;
+                        $line = (float) $fp->flat_price;
+                        $mode = 'flat';
+                        $usedFallback = false;
+                    }
+                }
+            }
+
+            if ($usedFallback) {
+                $finishingProduct = $finishingProductsById->get((int) $fid);
+                if (! $finishingProduct || $finishingProduct->status !== 'active') {
+                    continue;
+                }
+
+                $frp = $this->pricing->resolve($finishingProduct, $workingGroupId);
+                if (! $frp) {
+                    continue;
+                }
+
+                $unitFallback = $this->pricing->baseUnitPrice($frp, $requestedQty);
+                if ($unitFallback === null) {
+                    continue;
+                }
+
+                $unit = (float) $unitFallback;
+                $line = $unit * $requestedQty;
+                $mode = 'fallback_unit';
+            }
+
+            $line = (float) ($line ?? 0);
+            $unit = (float) ($unit ?? 0);
+
+            $total += $line;
+            $rows[] = [
+                'finishing_product_id' => (int) $fid,
+                'label' => (string) ($finishingProductsById->get((int) $fid)?->name ?? ('Finishing #' . $fid)),
+                'qty' => $requestedQty,
+                'unit_price' => round($unit, 2),
+                'total' => round($line, 2),
+                'pricing_snapshot' => [
+                    'source' => 'checkout.order_placement.finishings',
+                    'mode' => $mode,
+                    'qty' => $requestedQty,
+                    'unit_price' => $unit,
+                    'total' => $line,
+                    'captured_at' => now()->toISOString(),
+                ],
+            ];
+        }
+
+        return [
+            'rows' => $rows,
+            'total' => round($total, 2),
+        ];
     }
 
-    private function extractLineTotal(array $snapshot, int $qty): float
+    private function extractGrossTotal(array $snapshot, int $qty): float
     {
         $candidates = [
-            $snapshot['line_total'] ?? null,
             $snapshot['total'] ?? null,
-            data_get($snapshot, 'data.line_total'),
             data_get($snapshot, 'data.total'),
+            $snapshot['line_total'] ?? null,
+            data_get($snapshot, 'data.line_total'),
         ];
 
         foreach ($candidates as $c) {

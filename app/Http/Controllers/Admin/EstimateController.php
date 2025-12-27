@@ -11,12 +11,18 @@ use App\Http\Requests\UpsertEstimateItemRequest;
 use App\Models\Customer;
 use App\Models\Estimate;
 use App\Models\EstimateItem;
+use App\Models\EstimateItemFinishing;
 use App\Models\EstimateShare;
+use App\Models\Option;
 use App\Models\Product;
+use App\Models\ProductFinishingLink;
+use App\Models\ProductOption;
+use App\Models\ProductVariantSet;
 use App\Models\WorkingGroup;
 use App\Services\Estimates\EstimateDeliveryService;
 use App\Services\Estimates\EstimateFlowService;
 use App\Services\Estimates\EstimatePdfService;
+use App\Services\Pricing\VariantAvailabilityResolverService;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Foundation\Auth\Access\AuthorizesRequests;
 use Illuminate\Http\Request;
@@ -32,6 +38,7 @@ class EstimateController extends Controller
         private readonly EstimateFlowService $service,
         private readonly EstimateDeliveryService $delivery,
         private readonly EstimatePdfService $pdf,
+        private readonly VariantAvailabilityResolverService $variantAvailability,
     ) {}
 
     public function index(Request $request)
@@ -102,7 +109,7 @@ class EstimateController extends Controller
             'items.finishings.option',
             'items.product.primaryImage',
             'items.roll',
-            'items.variantSetItem',
+            'items.variantSetItem.option.group',
             'statusHistories.changedBy',
             'shares.createdBy',
             'createdBy',
@@ -161,12 +168,24 @@ class EstimateController extends Controller
                 'items.*.area_sqft' => ['nullable', 'numeric', 'min:0'],
                 'items.*.offcut_sqft' => ['nullable', 'numeric', 'min:0'],
                 'items.*.roll_id' => ['nullable', 'integer', 'exists:rolls,id'],
+                'items.*.options' => ['nullable', 'array', 'max:60'],
+                'items.*.options.*' => ['nullable', 'integer'],
+                // Back-compat (older estimate UIs)
+                'items.*.variant_set_item_id' => ['nullable', 'integer', 'exists:product_variant_set_items,id'],
                 'items.*.pricing_snapshot' => ['nullable', 'array'],
                 'items.*.unit_price' => ['required', 'numeric', 'min:0'],
                 'items.*.line_subtotal' => ['required', 'numeric', 'min:0'],
                 'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
                 'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
                 'items.*.line_total' => ['required', 'numeric', 'min:0'],
+
+                'items.*.finishings' => ['nullable', 'array'],
+                'items.*.finishings.*.finishing_product_id' => ['required_with:items.*.finishings', 'integer', 'exists:products,id'],
+                'items.*.finishings.*.label' => ['required_with:items.*.finishings', 'string', 'max:255'],
+                'items.*.finishings.*.qty' => ['required_with:items.*.finishings', 'integer', 'min:1'],
+                'items.*.finishings.*.unit_price' => ['required_with:items.*.finishings', 'numeric', 'min:0'],
+                'items.*.finishings.*.total' => ['required_with:items.*.finishings', 'numeric', 'min:0'],
+                'items.*.finishings.*.pricing_snapshot' => ['nullable', 'array'],
             ])['items'] ?? []);
         }
 
@@ -194,7 +213,7 @@ class EstimateController extends Controller
     {
         $this->authorize('view', $estimate);
 
-        $estimate->load(['items']);
+        $estimate->load(['items.finishings']);
 
         $workingGroups = WorkingGroup::query()
             ->orderBy('name')
@@ -247,12 +266,24 @@ class EstimateController extends Controller
             'items.*.area_sqft' => ['nullable', 'numeric', 'min:0'],
             'items.*.offcut_sqft' => ['nullable', 'numeric', 'min:0'],
             'items.*.roll_id' => ['nullable', 'integer', 'exists:rolls,id'],
+            'items.*.options' => ['nullable', 'array', 'max:60'],
+            'items.*.options.*' => ['nullable', 'integer'],
+            // Back-compat (older estimate UIs)
+            'items.*.variant_set_item_id' => ['nullable', 'integer', 'exists:product_variant_set_items,id'],
             'items.*.pricing_snapshot' => ['nullable', 'array'],
             'items.*.unit_price' => ['required', 'numeric', 'min:0'],
             'items.*.line_subtotal' => ['required', 'numeric', 'min:0'],
             'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
             'items.*.line_total' => ['required', 'numeric', 'min:0'],
+
+            'items.*.finishings' => ['nullable', 'array'],
+            'items.*.finishings.*.finishing_product_id' => ['required_with:items.*.finishings', 'integer', 'exists:products,id'],
+            'items.*.finishings.*.label' => ['required_with:items.*.finishings', 'string', 'max:255'],
+            'items.*.finishings.*.qty' => ['required_with:items.*.finishings', 'integer', 'min:1'],
+            'items.*.finishings.*.unit_price' => ['required_with:items.*.finishings', 'numeric', 'min:0'],
+            'items.*.finishings.*.total' => ['required_with:items.*.finishings', 'numeric', 'min:0'],
+            'items.*.finishings.*.pricing_snapshot' => ['nullable', 'array'],
         ]);
 
         $items = (array) ($data['items'] ?? []);
@@ -584,11 +615,15 @@ class EstimateController extends Controller
                     }
                 }
 
+                $resolvedVariant = $this->resolveVariantSelectionFromFormRow($product, $row, (int) $estimate->working_group_id);
+
                 $payload = [
                     'estimate_id' => $estimate->id,
                     'working_group_id' => $estimate->working_group_id,
 
                     'product_id' => $productId,
+                    // New variant selection is stored in pricing_snapshot (options + variant_set_id).
+                    // Keep legacy column null for forward-compat.
                     'variant_set_item_id' => null,
                     'roll_id' => $rollId ?: null,
 
@@ -632,12 +667,21 @@ class EstimateController extends Controller
                     'stored_by' => Auth::id(),
                     'working_group_id' => (int) $estimate->working_group_id,
                     'product_id' => (int) $row['product_id'],
+                    'input' => array_merge((array) ($incomingSnapshot['input'] ?? []), [
+                        'options' => $resolvedVariant['options'],
+                    ]),
+                    'options' => $resolvedVariant['options'],
+                    'variant_set_id' => $resolvedVariant['variant_set_id'],
+                    'variant_label' => $resolvedVariant['variant_label'],
                     'roll_id' => $payload['roll_id'],
                     'area_sqft' => $payload['area_sqft'],
                     'offcut_sqft' => $payload['offcut_sqft'],
                     'unit_price' => (float) $payload['unit_price'],
                     'line_total' => (float) $payload['line_total'],
                 ]);
+
+                /** @var \App\Models\EstimateItem|null $savedItem */
+                $savedItem = null;
 
                 if ($itemId) {
                     $item = EstimateItem::query()
@@ -647,13 +691,114 @@ class EstimateController extends Controller
 
                     if ($item) {
                         $item->update($payload);
-                        $keptIds[] = $item->id;
-                        continue;
+                        $savedItem = $item;
                     }
                 }
 
-                $created = EstimateItem::create($payload);
-                $keptIds[] = $created->id;
+                if (!$savedItem) {
+                    $savedItem = EstimateItem::create($payload);
+                }
+
+                // Sync finishings (optional)
+                $finRows = $row['finishings'] ?? null;
+                $finRows = is_array($finRows) ? array_values($finRows) : [];
+
+                $linkRows = ProductFinishingLink::query()
+                    ->where('product_id', $productId)
+                    ->where('is_active', true)
+                    ->whereNull('deleted_at')
+                    ->get(['finishing_product_id', 'is_required', 'min_qty', 'max_qty', 'default_qty'])
+                    ->keyBy('finishing_product_id');
+
+                // Validate required finishings present
+                $presentFinishingIds = [];
+                foreach ($finRows as $fr) {
+                    $fid = isset($fr['finishing_product_id']) ? (int) $fr['finishing_product_id'] : 0;
+                    $q = isset($fr['qty']) ? (int) $fr['qty'] : 0;
+                    if ($fid > 0 && $q > 0) $presentFinishingIds[] = $fid;
+                }
+                $presentLookup = array_flip($presentFinishingIds);
+
+                foreach ($linkRows as $link) {
+                    if (!$link->is_required) continue;
+                    if (!isset($presentLookup[(int) $link->finishing_product_id])) {
+                        throw ValidationException::withMessages([
+                            'items' => 'Missing required finishing for one or more items.',
+                        ]);
+                    }
+                }
+
+                $existingFinishings = EstimateItemFinishing::query()
+                    ->where('estimate_item_id', $savedItem->id)
+                    ->get()
+                    ->keyBy('finishing_product_id');
+
+                $keptFinishingIds = [];
+
+                foreach ($finRows as $fr) {
+                    $fid = isset($fr['finishing_product_id']) ? (int) $fr['finishing_product_id'] : 0;
+                    if ($fid <= 0) continue;
+
+                    $link = $linkRows->get($fid);
+                    if (!$link) {
+                        throw ValidationException::withMessages([
+                            'items' => 'Selected finishing is not available for one or more items.',
+                        ]);
+                    }
+
+                    $qty = isset($fr['qty']) ? (int) $fr['qty'] : 0;
+                    $qty = max(1, $qty);
+
+                    if ($link->min_qty !== null && $qty < (int) $link->min_qty) {
+                        $qty = (int) $link->min_qty;
+                    }
+                    if ($link->max_qty !== null && $qty > (int) $link->max_qty) {
+                        $qty = (int) $link->max_qty;
+                    }
+
+                    $unitPrice = is_numeric($fr['unit_price'] ?? null) ? (float) $fr['unit_price'] : 0.0;
+                    if ($unitPrice < 0) $unitPrice = 0.0;
+
+                    $totalFin = is_numeric($fr['total'] ?? null) ? (float) $fr['total'] : round($unitPrice * $qty, 2);
+                    if ($totalFin < 0) $totalFin = 0.0;
+
+                    $label = isset($fr['label']) ? (string) $fr['label'] : ('Finishing #' . $fid);
+                    $pricingSnap = $fr['pricing_snapshot'] ?? null;
+                    $pricingSnap = is_array($pricingSnap) ? $pricingSnap : null;
+
+                    $rowPayload = [
+                        'estimate_item_id' => $savedItem->id,
+                        'finishing_product_id' => $fid,
+                        'option_id' => null,
+                        'label' => $label,
+                        'qty' => $qty,
+                        'unit_price' => number_format($unitPrice, 2, '.', ''),
+                        'total' => number_format($totalFin, 2, '.', ''),
+                        'pricing_snapshot' => $pricingSnap,
+                    ];
+
+                    $existing = $existingFinishings->get($fid);
+                    if ($existing) {
+                        $existing->update($rowPayload);
+                    } else {
+                        EstimateItemFinishing::create($rowPayload);
+                    }
+
+                    $keptFinishingIds[] = $fid;
+                }
+
+                if (!empty($keptFinishingIds)) {
+                    EstimateItemFinishing::query()
+                        ->where('estimate_item_id', $savedItem->id)
+                        ->whereNotIn('finishing_product_id', $keptFinishingIds)
+                        ->delete();
+                } else {
+                    EstimateItemFinishing::query()
+                        ->where('estimate_item_id', $savedItem->id)
+                        ->delete();
+                }
+
+                $keptIds[] = $savedItem->id;
             }
 
             $itemsQuery = EstimateItem::query()->where('estimate_id', $estimate->id);
@@ -770,5 +915,153 @@ class EstimateController extends Controller
         }
 
         return $end ? $parsed->endOfDay() : $parsed->startOfDay();
+    }
+
+    /**
+     * Resolve public-style variant selection from estimate form row.
+     *
+     * Output:
+     * - options: map<option_group_id => option_id>
+     * - variant_set_id: matched set id if selection completes a valid set
+     * - variant_label: human-readable "Group: Option" label (ordered by product option group sort)
+     */
+    private function resolveVariantSelectionFromFormRow(Product $product, array $row, int $workingGroupId): array
+    {
+        $optionsInput = $row['options'] ?? null;
+        $optionsInput = is_array($optionsInput) ? $optionsInput : [];
+
+        $selectedByGroup = [];
+        foreach ($optionsInput as $gid => $oid) {
+            $gid = is_numeric($gid) ? (int) $gid : 0;
+            $oid = is_numeric($oid) ? (int) $oid : 0;
+            if ($gid > 0 && $oid > 0) {
+                $selectedByGroup[$gid] = $oid;
+            }
+        }
+
+        if (count($selectedByGroup) === 0) {
+            return [
+                'options' => [],
+                'variant_set_id' => null,
+                'variant_label' => null,
+            ];
+        }
+
+        $optionIds = array_values(array_unique(array_values($selectedByGroup)));
+
+        $optRows = Option::query()
+            ->whereIn('id', $optionIds)
+            ->get(['id', 'label', 'option_group_id'])
+            ->keyBy('id');
+
+        foreach ($selectedByGroup as $gid => $oid) {
+            $o = $optRows->get($oid);
+            if (! $o || (int) $o->option_group_id !== (int) $gid) {
+                throw ValidationException::withMessages([
+                    'items' => 'Selected variant options are not valid for one or more items.',
+                ]);
+            }
+        }
+
+        $activeOptionIds = ProductOption::query()
+            ->where('product_id', $product->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->whereIn('option_id', $optionIds)
+            ->pluck('option_id')
+            ->all();
+
+        $activeLookup = array_flip(array_map('intval', $activeOptionIds));
+        foreach ($optionIds as $oid) {
+            if (! isset($activeLookup[(int) $oid])) {
+                throw ValidationException::withMessages([
+                    'items' => 'Selected variant options are not active for one or more items.',
+                ]);
+            }
+        }
+
+        $matchedVariantSetId = null;
+
+        $sets = ProductVariantSet::query()
+            ->where('product_id', $product->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->with(['items.option:id,option_group_id,label'])
+            ->get();
+
+        if ($sets->count() > 0) {
+            $enabledSetIds = $this->variantAvailability->filterEnabledVariantSetIds(
+                $product,
+                $sets->pluck('id')->map(fn ($x) => (int) $x)->all(),
+                $workingGroupId
+            );
+            $enabledLookup = array_flip($enabledSetIds);
+            $sets = $sets->filter(fn ($s) => isset($enabledLookup[(int) $s->id]))->values();
+
+            $requiredGroupIds = $sets
+                ->flatMap(fn ($s) => ($s->items ?? collect())->map(fn ($it) => (int) ($it->option?->option_group_id ?: 0)))
+                ->filter(fn ($v) => $v > 0)
+                ->unique()
+                ->values()
+                ->all();
+
+            $isComplete = count($requiredGroupIds) > 0
+                && collect($requiredGroupIds)->every(fn ($gid) => isset($selectedByGroup[(int) $gid]));
+
+            if ($isComplete) {
+                foreach ($sets as $set) {
+                    $setMap = [];
+                    foreach (($set->items ?? collect()) as $it) {
+                        $gid = (int) ($it->option?->option_group_id ?: 0);
+                        if ($gid <= 0) {
+                            continue;
+                        }
+                        $setMap[$gid] = (int) $it->option_id;
+                    }
+
+                    $matches = true;
+                    foreach ($requiredGroupIds as $gid) {
+                        $gid = (int) $gid;
+                        if (! isset($setMap[$gid]) || (int) $setMap[$gid] !== (int) ($selectedByGroup[$gid] ?? 0)) {
+                            $matches = false;
+                            break;
+                        }
+                    }
+
+                    if ($matches) {
+                        $matchedVariantSetId = (int) $set->id;
+                        break;
+                    }
+                }
+            }
+        }
+
+        $product->loadMissing(['optionGroups:id,name']);
+        $groupsById = ($product->optionGroups ?? collect())->keyBy('id');
+
+        $parts = [];
+        foreach (($product->optionGroups ?? collect()) as $g) {
+            $gid = (int) $g->id;
+            $oid = (int) ($selectedByGroup[$gid] ?? 0);
+            if (! $oid) {
+                continue;
+            }
+            $o = $optRows->get($oid);
+            if (! $o) {
+                continue;
+            }
+
+            $gName = (string) ($groupsById->get($gid)?->name ?? '');
+            $oName = (string) ($o->label ?? '');
+            $parts[] = trim(($gName !== '' ? ($gName . ': ') : '') . $oName);
+        }
+
+        $variantLabel = trim(implode(', ', array_filter($parts)));
+
+        return [
+            'options' => $selectedByGroup,
+            'variant_set_id' => $matchedVariantSetId,
+            'variant_label' => $variantLabel !== '' ? $variantLabel : null,
+        ];
     }
 }

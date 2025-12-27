@@ -239,13 +239,11 @@
                     @endcan
 
                     @if ($status === 'accepted')
-                        <form method="POST" action="{{ route('admin.orders.from-estimate', $estimate) }}">
-                            @csrf
-                            <button type="submit"
-                                class="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600">
-                                Convert → Order
-                            </button>
-                        </form>
+                        <button type="button"
+                            @click="$dispatch('est-open-action', { mode: 'convert' })"
+                            class="inline-flex items-center justify-center gap-2 rounded-2xl bg-amber-500 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-amber-600">
+                            Convert → Order
+                        </button>
                     @endif
                 </div>
             </div>
@@ -315,18 +313,27 @@
                     </div>
                 @else
                     <div class="divide-y divide-slate-100">
-                        @foreach ($estimate->items as $it)
-                            @php
-                                $p = $it->product;
-                                $imgPath = $p?->primaryImage?->path ? ltrim((string) $p->primaryImage->path, '/') : '';
-                                $imgUrl = $imgPath !== '' ? asset('storage/' . $imgPath) : asset('assets/placeholders/product.png');
-                                $isDim = (bool) ($p?->product_type === 'dimension_based' || $p?->requires_dimensions);
-                                $rollName = $it->roll?->name;
-                                $rollWidth = $it->roll?->width_in;
-                                $snap = is_array($it->pricing_snapshot) ? $it->pricing_snapshot : [];
-                                $rotated = (bool) data_get($snap, 'roll.rotated', false);
-                                $autoRoll = (bool) data_get($snap, 'roll.auto', false);
-                            @endphp
+	                        @foreach ($estimate->items as $it)
+	                            @php
+	                                $p = $it->product;
+	                                $imgPath = $p?->primaryImage?->path ? ltrim((string) $p->primaryImage->path, '/') : '';
+	                                $imgUrl = $imgPath !== '' ? asset('storage/' . $imgPath) : asset('assets/placeholders/product.png');
+	                                $isDim = (bool) ($p?->product_type === 'dimension_based' || $p?->requires_dimensions);
+	                                $rollName = $it->roll?->name;
+	                                $rollWidth = $it->roll?->width_in;
+	                                $snap = is_array($it->pricing_snapshot) ? $it->pricing_snapshot : [];
+	                                $rotated = (bool) data_get($snap, 'roll.rotated', false);
+	                                $autoRoll = (bool) data_get($snap, 'roll.auto', false);
+	                                $finTotal = (float) ($it->finishings?->sum('total') ?? 0);
+	                                $variantLabel = (string) (data_get($snap, 'variant_label') ?? '');
+	                                if ($variantLabel === '' && $it->variantSetItem) {
+	                                    $g = $it->variantSetItem->option?->group?->name;
+	                                    $o = $it->variantSetItem->option?->label;
+	                                    $variantLabel = trim(($g ? ($g . ': ') : '') . ($o ?: ''));
+	                                }
+	                                $lineSubtotalWithFin = (float) ($it->line_subtotal ?? 0) + $finTotal;
+	                                $lineTotalWithFin = (float) ($it->line_total ?? 0) + $finTotal;
+	                            @endphp
 
                             <div class="px-6 py-5">
                                 <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
@@ -378,33 +385,69 @@
                                                         Offcut: <span class="font-semibold text-slate-800">{{ number_format((float) $it->offcut_sqft, 4) }} sqft</span>
                                                     </span>
                                                 @endif
-                                                @if ($rollName)
-                                                    <span class="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-slate-700 ring-1 ring-slate-200">
-                                                        Roll: <span class="font-semibold">{{ $rollName }}@if($rollWidth) ({{ number_format((float) $rollWidth, 1) }}in)@endif</span>
-                                                        @if ($autoRoll)
-                                                            <span class="ml-1 text-slate-400">· Auto</span>
-                                                        @endif
-                                                    </span>
-                                                    @if ($rotated)
-                                                        <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 ring-1 ring-amber-200">
-                                                            Rotated
-                                                        </span>
-                                                    @endif
-                                                @endif
-                                            </div>
-                                        </div>
-                                    </div>
+	                                                @if ($rollName)
+	                                                    <span class="inline-flex items-center gap-1 rounded-full bg-slate-50 px-2 py-0.5 text-slate-700 ring-1 ring-slate-200">
+	                                                        Roll: <span class="font-semibold">{{ $rollName }}@if($rollWidth) ({{ number_format((float) $rollWidth, 1) }}in)@endif</span>
+	                                                        @if ($autoRoll)
+	                                                            <span class="ml-1 text-slate-400">· Auto</span>
+	                                                        @endif
+	                                                    </span>
+	                                                    @if ($rotated)
+	                                                        <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-amber-800 ring-1 ring-amber-200">
+	                                                            Rotated
+	                                                        </span>
+	                                                    @endif
+	                                                @endif
+	                                                @if ($variantLabel !== '')
+	                                                    <span class="inline-flex items-center gap-1 rounded-full bg-indigo-50 px-2 py-0.5 text-indigo-700 ring-1 ring-indigo-200">
+	                                                        Variant: <span class="font-semibold">{{ $variantLabel }}</span>
+	                                                    </span>
+	                                                @endif
+	                                                @if ($it->finishings?->count())
+	                                                    <span class="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 ring-1 ring-slate-200">
+	                                                        Finishings: <span class="font-semibold text-slate-800">{{ $it->finishings->count() }}</span>
+	                                                    </span>
+	                                                @endif
+	                                            </div>
+
+	                                            @if ($it->finishings?->count())
+	                                                <div class="mt-3 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+	                                                    <div class="flex items-center justify-between gap-3">
+	                                                        <div class="font-semibold text-slate-900">Finishings</div>
+	                                                        <div class="font-bold text-slate-900">{{ $currency }} {{ number_format((float) $finTotal, 2) }}</div>
+	                                                    </div>
+	                                                    <div class="mt-2 space-y-1">
+	                                                        @foreach ($it->finishings as $f)
+	                                                            <div class="flex items-center justify-between gap-3">
+	                                                                <div class="min-w-0 truncate">
+	                                                                    {{ $f->label ?? ($f->option?->label ?? ('Finishing #' . $f->finishing_product_id)) }}
+	                                                                    <span class="text-slate-500">× {{ (int) ($f->qty ?? 1) }}</span>
+	                                                                </div>
+	                                                                <div class="whitespace-nowrap font-semibold text-slate-900">
+	                                                                    {{ $currency }} {{ number_format((float) ($f->total ?? 0), 2) }}
+	                                                                </div>
+	                                                            </div>
+	                                                        @endforeach
+	                                                    </div>
+	                                                </div>
+	                                            @endif
+	                                        </div>
+	                                    </div>
 
                                     <div class="grid grid-cols-2 gap-3 sm:grid-cols-1 sm:text-right">
-                                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
-                                            <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Line Total</div>
-                                            <div class="mt-1 text-base font-black text-slate-900">{{ $currency }} {{ number_format((float) $it->line_total, 2) }}</div>
-                                            <div class="mt-1 text-[11px] text-slate-600">
-                                                Sub {{ number_format((float) $it->line_subtotal, 2) }}
-                                                · Disc {{ number_format((float) $it->discount_amount, 2) }}
-                                                · Tax {{ number_format((float) $it->tax_amount, 2) }}
-                                            </div>
-                                        </div>
+	                                        <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3">
+	                                            <div class="text-[11px] font-semibold uppercase tracking-wide text-slate-400">Line Total</div>
+	                                            <div class="mt-1 text-base font-black text-slate-900">{{ $currency }} {{ number_format((float) $lineTotalWithFin, 2) }}</div>
+	                                            <div class="mt-1 text-[11px] text-slate-600">
+	                                                Base {{ number_format((float) $it->line_subtotal, 2) }}
+	                                                @if ($finTotal > 0)
+	                                                    · Fin {{ number_format((float) $finTotal, 2) }}
+	                                                @endif
+	                                                · Sub {{ number_format((float) $lineSubtotalWithFin, 2) }}
+	                                                · Disc {{ number_format((float) $it->discount_amount, 2) }}
+	                                                · Tax {{ number_format((float) $it->tax_amount, 2) }}
+	                                            </div>
+	                                        </div>
                                     </div>
                                 </div>
                             </div>
@@ -508,7 +551,7 @@
             </aside>
         </div>
 
-        {{-- Action modal (send/accept/reject) --}}
+        {{-- Action modal (send/accept/reject/convert) --}}
         <div
             x-data="{ open: false, mode: null, reason: '' }"
             @est-open-action.window="open=true; mode=$event.detail.mode; reason=''"
@@ -541,7 +584,8 @@
                                 <h3 class="text-lg font-bold text-slate-900" x-text="
                                     mode === 'send' ? 'Send Estimate' :
                                     mode === 'accept' ? 'Accept Estimate' :
-                                    'Reject Estimate'
+                                    mode === 'reject' ? 'Reject Estimate' :
+                                    'Convert to Order'
                                 "></h3>
                                 <p class="mt-1 text-sm text-slate-500">
                                     {{ $estimate->estimate_no ?? ('EST-' . $estimate->id) }}
@@ -579,7 +623,8 @@
                             :action="
                                 mode==='send' ? `{{ url('/admin/estimates/'.$estimate->id.'/send') }}` :
                                 mode==='accept' ? `{{ url('/admin/estimates/'.$estimate->id.'/accept') }}` :
-                                `{{ url('/admin/estimates/'.$estimate->id.'/reject') }}`
+                                mode==='reject' ? `{{ url('/admin/estimates/'.$estimate->id.'/reject') }}` :
+                                `{{ route('admin.orders.from-estimate', $estimate) }}`
                             ">
                             @csrf
                             <input type="hidden" name="reason" :value="reason">
@@ -588,7 +633,8 @@
                                 :class="
                                     mode==='send' ? 'bg-slate-900 hover:bg-slate-800' :
                                     mode==='accept' ? 'bg-emerald-600 hover:bg-emerald-700' :
-                                    'bg-rose-600 hover:bg-rose-700'
+                                    mode==='reject' ? 'bg-rose-600 hover:bg-rose-700' :
+                                    'bg-amber-500 hover:bg-amber-600'
                                 ">
                                 Confirm
                             </button>

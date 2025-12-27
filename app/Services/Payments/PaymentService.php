@@ -46,6 +46,8 @@ class PaymentService
             'received_at' => $data['received_at'] ?? null,
             'received_by' => $data['received_by'] ?? $actor->id,
             'meta' => $data['meta'] ?? null,
+            'created_by' => $actor->id,
+            'updated_by' => $actor->id,
         ]);
 
         $this->activity('payment.created', $actor, $payment, [
@@ -150,7 +152,7 @@ class PaymentService
                 'currency' => $payment->currency ?? 'LKR',
                 'paid_at' => $payment->received_at,
                 'reference' => $payment->reference_no,
-                'note' => null,
+                'note' => $meta['note'] ?? null,
                 'created_by' => $actor->id,
                 'meta' => [
                     'source' => 'payment_allocation',

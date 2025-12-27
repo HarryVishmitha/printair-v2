@@ -8,6 +8,7 @@ use App\Models\OrderItem;
 use App\Models\OrderItemFinishing;
 use App\Models\OrderStatusHistory;
 use App\Models\User;
+use App\Services\Invoices\InvoiceFlowService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
@@ -16,6 +17,10 @@ use Illuminate\Validation\ValidationException;
 
 class OrderFlowService
 {
+    public function __construct(
+        private readonly InvoiceFlowService $invoices,
+    ) {}
+
     public function createFromEstimate(Estimate $estimate, array $meta = []): Order
     {
         $actor = $this->actor();
@@ -36,88 +41,100 @@ class OrderFlowService
             }
 
             // One Estimate -> One Order (enforced)
-            $existing = Order::query()->where('estimate_id', $estimate->id)->first();
-            if ($existing) {
-                return $existing; // idempotent conversion
-            }
+            $order = Order::query()->where('estimate_id', $estimate->id)->first();
+            $orderNo = $order?->order_no;
 
-            $orderNo = $this->generateOrderNo($estimate->working_group_id);
+            if (! $order) {
+                $orderNo = $this->generateOrderNo($estimate->working_group_id);
 
-            $order = Order::create([
-                'uuid' => (string) Str::uuid(),
-                'order_no' => $orderNo,
+                $order = Order::create([
+                    'uuid' => (string) Str::uuid(),
+                    'order_no' => $orderNo,
 
-                'working_group_id' => $estimate->working_group_id,
+                    'working_group_id' => $estimate->working_group_id,
 
-                'customer_id' => $estimate->customer_id,
-                'estimate_id' => $estimate->id,
-                'customer_snapshot' => $estimate->customer_snapshot,
+                    'customer_id' => $estimate->customer_id,
+                    'estimate_id' => $estimate->id,
+                    'customer_snapshot' => $estimate->customer_snapshot,
 
-                'currency' => $estimate->currency,
+                    'currency' => $estimate->currency,
 
-                'subtotal' => $estimate->subtotal,
-                'discount_total' => $estimate->discount_total,
-                'tax_total' => $estimate->tax_total,
-                'shipping_fee' => $estimate->shipping_fee,
-                'other_fee' => $estimate->other_fee,
-                'grand_total' => $estimate->grand_total,
+                    'subtotal' => $estimate->subtotal,
+                    'discount_total' => $estimate->discount_total,
+                    'tax_total' => $estimate->tax_total,
+                    'shipping_fee' => $estimate->shipping_fee,
+                    'other_fee' => $estimate->other_fee,
+                    'grand_total' => $estimate->grand_total,
 
-                'status' => 'draft',
-                'payment_status' => 'unpaid',
+                    'status' => 'draft',
+                    'payment_status' => 'unpaid',
 
-                'ordered_at' => now(),
+                    'ordered_at' => now(),
 
-                'meta' => $meta ?: null,
+                    'meta' => $meta ?: null,
 
-                'created_by' => $actor->id,
-                'updated_by' => $actor->id,
-            ]);
-
-            // Copy items + finishings as immutable snapshots
-            $estimate->load(['items.finishings']);
-
-            foreach ($estimate->items as $ei) {
-                $oi = OrderItem::create([
-                    'order_id' => $order->id,
-                    'working_group_id' => $order->working_group_id,
-
-                    'product_id' => $ei->product_id,
-                    'variant_set_item_id' => $ei->variant_set_item_id,
-                    'roll_id' => $ei->roll_id,
-
-                    'title' => $ei->title,
-                    'description' => $ei->description,
-
-                    'qty' => $ei->qty,
-
-                    'width' => $ei->width,
-                    'height' => $ei->height,
-                    'unit' => $ei->unit,
-                    'area_sqft' => $ei->area_sqft,
-                    'offcut_sqft' => $ei->offcut_sqft,
-
-                    'unit_price' => $ei->unit_price,
-                    'line_subtotal' => $ei->line_subtotal,
-                    'discount_amount' => $ei->discount_amount,
-                    'tax_amount' => $ei->tax_amount,
-                    'line_total' => $ei->line_total,
-
-                    'pricing_snapshot' => $ei->pricing_snapshot,
-                    'sort_order' => $ei->sort_order,
+                    'created_by' => $actor->id,
+                    'updated_by' => $actor->id,
                 ]);
 
-                foreach ($ei->finishings as $ef) {
-                    OrderItemFinishing::create([
-                        'order_item_id' => $oi->id,
-                        'finishing_product_id' => $ef->finishing_product_id,
-                        'option_id' => $ef->option_id,
-                        'label' => $ef->label,
-                        'qty' => $ef->qty,
-                        'unit_price' => $ef->unit_price,
-                        'total' => $ef->total,
-                        'pricing_snapshot' => $ef->pricing_snapshot,
+                // Copy items + finishings as immutable snapshots
+                $estimate->load(['items.finishings']);
+
+                foreach ($estimate->items as $ei) {
+                    $oi = OrderItem::create([
+                        'order_id' => $order->id,
+                        'working_group_id' => $order->working_group_id,
+
+                        'product_id' => $ei->product_id,
+                        'variant_set_item_id' => $ei->variant_set_item_id,
+                        'roll_id' => $ei->roll_id,
+
+                        'title' => $ei->title,
+                        'description' => $ei->description,
+
+                        'qty' => $ei->qty,
+
+                        'width' => $ei->width,
+                        'height' => $ei->height,
+                        'unit' => $ei->unit,
+                        'area_sqft' => $ei->area_sqft,
+                        'offcut_sqft' => $ei->offcut_sqft,
+
+                        'unit_price' => $ei->unit_price,
+                        'line_subtotal' => $ei->line_subtotal,
+                        'discount_amount' => $ei->discount_amount,
+                        'tax_amount' => $ei->tax_amount,
+                        'line_total' => $ei->line_total,
+
+                        'pricing_snapshot' => $ei->pricing_snapshot,
+                        'sort_order' => $ei->sort_order,
                     ]);
+
+                    foreach ($ei->finishings as $ef) {
+                        OrderItemFinishing::create([
+                            'order_item_id' => $oi->id,
+                            'finishing_product_id' => $ef->finishing_product_id,
+                            'option_id' => $ef->option_id,
+                            'label' => $ef->label,
+                            'qty' => $ef->qty,
+                            'unit_price' => $ef->unit_price,
+                            'total' => $ef->total,
+                            'pricing_snapshot' => $ef->pricing_snapshot,
+                        ]);
+                    }
                 }
+
+                $this->logStatusChange($order, null, 'draft', $actor, 'Order created from estimate', [
+                    'estimate_id' => $estimate->id,
+                    'estimate_no' => $estimate->estimate_no,
+                    'order_no' => $orderNo,
+                ]);
+
+                $this->activity('order.created', $actor, $order, [
+                    'from_estimate_id' => $estimate->id,
+                    'from_estimate_no' => $estimate->estimate_no,
+                    'order_no' => $orderNo,
+                ]);
             }
 
             // Update estimate status to converted (lock stays)
@@ -127,24 +144,33 @@ class OrderFlowService
                 'updated_by' => $actor->id,
             ]);
 
-            $this->logStatusChange($order, null, 'draft', $actor, 'Order created from estimate', [
-                'estimate_id' => $estimate->id,
-                'estimate_no' => $estimate->estimate_no,
-                'order_no' => $orderNo,
-            ]);
-
-            $this->activity('order.created', $actor, $order, [
-                'from_estimate_id' => $estimate->id,
-                'from_estimate_no' => $estimate->estimate_no,
-                'order_no' => $orderNo,
-            ]);
-
             $this->activity('estimate.converted', $actor, $estimate, [
                 'order_id' => $order->id,
                 'order_no' => $orderNo,
             ]);
 
-            return $order->fresh(['items.finishings']);
+            // Ensure a final invoice is created + issued (estimate is treated as final pricing).
+            $invoice = $order->invoices()->where('type', 'final')->first();
+            if (! $invoice) {
+                $invoice = $this->invoices->createFromOrder($order, 'final', [
+                    'source' => 'estimate_conversion',
+                    'estimate_id' => $estimate->id,
+                    'estimate_no' => $estimate->estimate_no,
+                    'order_no' => $orderNo,
+                ]);
+            }
+
+            if ((string) $invoice->status === 'draft') {
+                $invoice = $this->invoices->issue($invoice, [
+                    'reason' => $meta['reason'] ?? 'Auto-issued from estimate conversion',
+                    'source' => 'estimate_conversion',
+                    'estimate_id' => $estimate->id,
+                    'estimate_no' => $estimate->estimate_no,
+                    'order_no' => $orderNo,
+                ]);
+            }
+
+            return $order->fresh(['items.finishings', 'invoices']);
         });
     }
 

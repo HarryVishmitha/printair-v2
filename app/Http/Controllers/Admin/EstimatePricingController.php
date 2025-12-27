@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\WorkingGroup;
 use App\Services\Pricing\DimensionCalculatorService;
 use App\Services\Pricing\PricingResolverService;
+use App\Services\Pricing\VariantAvailabilityResolverService;
 use Illuminate\Http\Request;
 
 class EstimatePricingController extends Controller
@@ -14,6 +15,7 @@ class EstimatePricingController extends Controller
     public function __construct(
         private readonly PricingResolverService $pricing,
         private readonly DimensionCalculatorService $dimensions,
+        private readonly VariantAvailabilityResolverService $variantAvailability,
     ) {
     }
 
@@ -83,7 +85,7 @@ class EstimatePricingController extends Controller
             $rates = null;
 
             if ($rp) {
-                if ($isDimensionBased) {
+	        if ($isDimensionBased) {
                     $rates = $this->pricing->dimensionRates($rp);
                     $rate = $rates['rate_per_sqft'] ?? null;
                     $priceMode = 'sqft';
@@ -155,6 +157,192 @@ class EstimatePricingController extends Controller
         ]);
     }
 
+    public function variants(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'working_group_id' => ['required', 'integer', 'exists:working_groups,id'],
+        ]);
+
+        if ($product->status !== 'active') {
+            return response()->json(['message' => 'Product inactive.'], 422);
+        }
+
+        $wgId = (int) $validated['working_group_id'];
+
+        // Match public product variants structure:
+        // option_groups + variant_matrix (enabled by WG)
+        $product->loadMissing([
+            'optionGroups:id,name',
+            'options:id,option_group_id,label',
+            'activeVariantSets:id,product_id,code,is_active',
+            'activeVariantSets.items:id,variant_set_id,option_id',
+            'activeVariantSets.items.option:id,option_group_id,label',
+        ]);
+
+        $optionRows = ($product->options ?? collect())->values();
+        $optionsByGroup = $optionRows->groupBy('option_group_id');
+
+        $optionGroups = ($product->optionGroups ?? collect())->values()->map(function ($g) use ($optionsByGroup) {
+            $opts = ($optionsByGroup[$g->id] ?? collect())->map(fn ($o) => [
+                'id' => (int) $o->id,
+                'name' => (string) $o->label,
+            ])->values()->all();
+
+            return [
+                'id' => (int) $g->id,
+                'name' => (string) $g->name,
+                'is_required' => (bool) ($g->pivot?->is_required ?? false),
+                'options' => $opts,
+            ];
+        })->values();
+
+        $sets = ($product->activeVariantSets ?? collect())->where('is_active', true)->values();
+
+        $enabledSetIds = $this->variantAvailability->filterEnabledVariantSetIds(
+            $product,
+            $sets->pluck('id')->map(fn ($x) => (int) $x)->all(),
+            $wgId
+        );
+        $enabledLookup = array_flip($enabledSetIds);
+
+        $variantMatrix = $sets
+            ->filter(fn ($set) => isset($enabledLookup[(int) $set->id]))
+            ->values()
+            ->map(function ($set) {
+                $map = ($set->items ?? collect())
+                    ->mapWithKeys(function ($it) {
+                        $gid = $it->option?->option_group_id;
+                        if (! $gid) {
+                            return [];
+                        }
+                        return [(int) $gid => (int) $it->option_id];
+                    })
+                    ->all();
+
+                return [
+                    'variant_set_id' => (int) $set->id,
+                    'options' => $map,
+                ];
+            })
+            ->filter(fn ($row) => count((array) ($row['options'] ?? [])) > 0)
+            ->values();
+
+        $variantGroupIds = $variantMatrix
+            ->flatMap(fn ($row) => array_keys((array) ($row['options'] ?? [])))
+            ->unique()
+            ->values()
+            ->all();
+
+        if (count($variantGroupIds) > 0) {
+            $optionGroups = $optionGroups->filter(fn ($g) => in_array((int) $g['id'], $variantGroupIds, true))->values();
+        }
+
+        return response()->json([
+            'product_id' => (int) $product->id,
+            'working_group_id' => $wgId,
+            'option_groups' => $optionGroups->values()->all(),
+            'variant_matrix' => $variantMatrix->values()->all(),
+        ]);
+    }
+
+    public function finishings(Request $request, Product $product)
+    {
+        $validated = $request->validate([
+            'working_group_id' => ['required', 'integer', 'exists:working_groups,id'],
+        ]);
+
+        if ($product->status !== 'active') {
+            return response()->json(['message' => 'Product inactive.'], 422);
+        }
+
+        $wgId = (int) $validated['working_group_id'];
+
+        $rp = $this->pricing->resolve($product, $wgId);
+        if (!$rp) {
+            return response()->json(['message' => 'No pricing configured for this working group.'], 422);
+        }
+
+        $links = \App\Models\ProductFinishingLink::query()
+            ->where('product_id', $product->id)
+            ->where('is_active', true)
+            ->whereNull('deleted_at')
+            ->get([
+                'finishing_product_id',
+                'is_required',
+                'default_qty',
+                'min_qty',
+                'max_qty',
+            ])
+            ->keyBy('finishing_product_id');
+
+        $finishings = $product->finishings()
+            ->where('products.status', 'active')
+            ->with(['primaryImage:id,product_id,path,is_featured'])
+            ->get(['products.id', 'products.name', 'products.product_code'])
+            ->values();
+
+        $items = $finishings->map(function (Product $fp) use ($links, $rp, $wgId) {
+            $link = $links->get($fp->id);
+            $defaultQty = (int) ($link?->default_qty ?? 1);
+            $defaultQty = $defaultQty > 0 ? $defaultQty : 1;
+
+            $unitPrice = null;
+            $priceMode = 'unknown';
+
+            $fpRow = $this->pricing->finishingPricing($rp, (int) $fp->id);
+            if ($fpRow && $fpRow->is_active) {
+                if ($fpRow->price_per_piece !== null) {
+                    $unitPrice = (float) $fpRow->price_per_piece;
+                    $priceMode = 'per_piece';
+                } elseif ($fpRow->price_per_side !== null) {
+                    $unitPrice = (float) $fpRow->price_per_side;
+                    $priceMode = 'per_side';
+                } elseif ($fpRow->flat_price !== null) {
+                    $unitPrice = (float) $fpRow->flat_price;
+                    $priceMode = 'flat';
+                }
+            }
+
+            if ($unitPrice === null) {
+                $frp = $this->pricing->resolve($fp, $wgId);
+                $fallback = $frp ? $this->pricing->baseUnitPrice($frp, $defaultQty) : null;
+                if ($fallback !== null) {
+                    $unitPrice = (float) $fallback;
+                    $priceMode = 'fallback_unit';
+                }
+            }
+
+            $placeholder = asset('assets/placeholders/product.png');
+            $path = $fp->primaryImage?->path ? ltrim((string) $fp->primaryImage->path, '/') : '';
+            $imageUrl = $path !== '' ? asset('storage/' . $path) : $placeholder;
+
+            $label = $unitPrice === null ? null : ('LKR ' . number_format((float) $unitPrice, 2));
+            if ($priceMode === 'flat' && $unitPrice !== null) {
+                $label = 'LKR ' . number_format((float) $unitPrice, 2) . ' (flat)';
+            }
+
+            return [
+                'finishing_product_id' => (int) $fp->id,
+                'name' => (string) $fp->name,
+                'code' => (string) ($fp->product_code ?? ''),
+                'image_url' => $imageUrl,
+                'is_required' => (bool) ($link?->is_required ?? false),
+                'default_qty' => $link?->default_qty !== null ? (int) $link->default_qty : null,
+                'min_qty' => $link?->min_qty !== null ? (int) $link->min_qty : null,
+                'max_qty' => $link?->max_qty !== null ? (int) $link->max_qty : null,
+                'unit_price' => $unitPrice,
+                'price_mode' => $priceMode,
+                'price_label' => $label,
+            ];
+        })->values();
+
+        return response()->json([
+            'product_id' => (int) $product->id,
+            'working_group_id' => $wgId,
+            'items' => $items,
+        ]);
+    }
+
     public function quote(Request $request)
     {
         $validated = $request->validate([
@@ -163,14 +351,14 @@ class EstimatePricingController extends Controller
             'qty' => ['required', 'integer', 'min:1', 'max:100000'],
 
             'width' => ['nullable', 'numeric', 'min:0.01'],
-            'height' => ['nullable', 'numeric', 'min:0.01'],
-            'unit' => ['nullable', 'string', 'in:in,ft,mm,cm,m'],
-            'roll_id' => ['nullable', 'integer'],
-            'options' => ['nullable', 'array', 'max:60'],
-            'options.*' => ['nullable', 'integer'],
-            'finishings' => ['nullable', 'array'],
-            'finishings.*' => ['nullable'],
-        ]);
+	            'height' => ['nullable', 'numeric', 'min:0.01'],
+	            'unit' => ['nullable', 'string', 'in:in,ft,mm,cm,m'],
+	            'roll_id' => ['nullable', 'integer'],
+	            'options' => ['nullable', 'array', 'max:60'],
+	            'options.*' => ['nullable', 'integer'],
+	            'finishings' => ['nullable', 'array'],
+	            'finishings.*' => ['nullable'],
+	        ]);
 
         $wg = WorkingGroup::query()->whereKey((int) $validated['working_group_id'])->firstOrFail();
         $product = Product::query()->whereKey((int) $validated['product_id'])->firstOrFail();
@@ -188,8 +376,12 @@ class EstimatePricingController extends Controller
 
         $isDimensionBased = (bool) ($product->product_type === 'dimension_based' || $product->requires_dimensions);
 
-        $breakdown = [];
-        $total = 0.0;
+	        $breakdown = [];
+	        $baseTotal = 0.0;
+	        $variantTotal = 0.0;
+	        $finishingsTotal = 0.0;
+	        $finishingsRows = [];
+	        $total = 0.0; // returned as base + finishings (see below)
 
         $w = $validated['width'] ?? null;
         $h = $validated['height'] ?? null;
@@ -207,6 +399,127 @@ class EstimatePricingController extends Controller
 
         $rollId = isset($validated['roll_id']) ? (int) $validated['roll_id'] : null;
         $rollWidthIn = null;
+
+        // Variants (dependent option groups -> match a variant set combination; same logic as public product quote)
+        $matchedVariantSetId = null;
+        $variantLabel = null;
+        $vp = null;
+        $selectedByGroup = [];
+
+        foreach ((array) ($validated['options'] ?? []) as $gid => $oid) {
+            if (!is_numeric($gid) || !is_numeric($oid)) {
+                continue;
+            }
+            $gid = (int) $gid;
+            $oid = (int) $oid;
+            if ($gid <= 0 || $oid <= 0) {
+                continue;
+            }
+            $selectedByGroup[$gid] = $oid;
+        }
+
+        if (count($selectedByGroup) > 0) {
+            $optionIds = array_values($selectedByGroup);
+
+            // Validate option IDs belong to the claimed group IDs
+            $groupByOptionId = \App\Models\Option::query()
+                ->whereIn('id', $optionIds)
+                ->pluck('option_group_id', 'id')
+                ->all();
+
+            foreach ($selectedByGroup as $gid => $oid) {
+                if (!isset($groupByOptionId[$oid]) || (int) $groupByOptionId[$oid] !== (int) $gid) {
+                    return response()->json(['message' => 'Invalid variant selection.'], 422);
+                }
+            }
+
+            // Validate options are active for this product
+            $activeOptionIds = \App\Models\ProductOption::query()
+                ->where('product_id', $product->id)
+                ->whereIn('option_id', $optionIds)
+                ->where('is_active', true)
+                ->whereNull('deleted_at')
+                ->pluck('option_id')
+                ->all();
+
+            if (count($activeOptionIds) !== count(array_unique($optionIds))) {
+                return response()->json(['message' => 'One or more selected variants are not available for this product.'], 422);
+            }
+
+            $sets = \App\Models\ProductVariantSet::query()
+                ->where('product_id', $product->id)
+                ->where('is_active', true)
+                ->with(['items.option:id,option_group_id,label'])
+                ->get();
+
+            if ($sets->count() > 0) {
+                // Filter enabled sets for WG
+                $enabledSetIds = $this->variantAvailability->filterEnabledVariantSetIds(
+                    $product,
+                    $sets->pluck('id')->map(fn($x) => (int) $x)->all(),
+                    $wg->id
+                );
+                $enabledLookup = array_flip($enabledSetIds);
+                $sets = $sets->filter(fn($s) => isset($enabledLookup[(int) $s->id]))->values();
+
+                $requiredGroupIds = $sets
+                    ->flatMap(fn($s) => ($s->items ?? collect())->map(fn($it) => (int) ($it->option?->option_group_id ?: 0)))
+                    ->filter(fn($v) => $v > 0)
+                    ->unique()
+                    ->values()
+                    ->all();
+
+                $isComplete = count($requiredGroupIds) > 0
+                    && collect($requiredGroupIds)->every(fn($gid) => isset($selectedByGroup[(int) $gid]));
+
+                if ($isComplete) {
+                    foreach ($sets as $set) {
+                        $setMap = [];
+                        foreach (($set->items ?? collect()) as $it) {
+                            $gid = (int) ($it->option?->option_group_id ?: 0);
+                            if ($gid <= 0) continue;
+                            $setMap[$gid] = (int) $it->option_id;
+                        }
+
+                        $matches = true;
+                        foreach ($requiredGroupIds as $gid) {
+                            $gid = (int) $gid;
+                            if (!isset($setMap[$gid]) || (int) $setMap[$gid] !== (int) ($selectedByGroup[$gid] ?? 0)) {
+                                $matches = false;
+                                break;
+                            }
+                        }
+
+                        if ($matches) {
+                            $matchedVariantSetId = (int) $set->id;
+                            break;
+                        }
+                    }
+
+                    if ($matchedVariantSetId) {
+                        $vp = $this->pricing->variantPricing($rp, $matchedVariantSetId);
+
+                        // Build label from selected options (group: option)
+                        $optRows = \App\Models\Option::query()
+                            ->with('group:id,name')
+                            ->whereIn('id', $optionIds)
+                            ->get(['id', 'label', 'option_group_id'])
+                            ->keyBy('id');
+
+                        $parts = [];
+                        foreach ($requiredGroupIds as $gid) {
+                            $oid = (int) ($selectedByGroup[(int) $gid] ?? 0);
+                            $o = $optRows->get($oid);
+                            if (!$o) continue;
+                            $gName = (string) ($o->group?->name ?? '');
+                            $oName = (string) ($o->label ?? '');
+                            $parts[] = trim(($gName !== '' ? ($gName . ': ') : '') . $oName);
+                        }
+                        $variantLabel = trim(implode(', ', array_filter($parts)));
+                    }
+                }
+            }
+        }
 
         if ($isDimensionBased) {
             if ($w === null || $h === null) {
@@ -347,10 +660,10 @@ class EstimatePricingController extends Controller
                 return response()->json(['message' => 'Height exceeds the maximum allowed.'], 422);
             }
 
-            $rates = $rollId ? $this->pricing->rollRates($rp, $rollId) : $this->pricing->dimensionRates($rp);
-            $rate = !empty($rates['rate_per_sqft']) ? (float) $rates['rate_per_sqft'] : null;
-            $offcutRate = !empty($rates['offcut_rate_per_sqft']) ? (float) $rates['offcut_rate_per_sqft'] : null;
-            $minCharge = !empty($rates['min_charge']) ? (float) $rates['min_charge'] : null;
+	            $rates = $rollId ? $this->pricing->rollRates($rp, $rollId) : $this->pricing->dimensionRates($rp);
+	            $rate = !empty($rates['rate_per_sqft']) ? (float) $rates['rate_per_sqft'] : null;
+	            $offcutRate = !empty($rates['offcut_rate_per_sqft']) ? (float) $rates['offcut_rate_per_sqft'] : null;
+	            $minCharge = !empty($rates['min_charge']) ? (float) $rates['min_charge'] : null;
 
             $calc = $rate === null ? null : $this->dimensions->calculateDimensionPrice(
                 (float) $widthIn,
@@ -363,7 +676,7 @@ class EstimatePricingController extends Controller
             );
 
             $baseTotal = (float) ($calc['total'] ?? 0);
-            $total += $baseTotal;
+            $total = $baseTotal;
 
             if ($calc) {
                 $areaCharge = (float) ($calc['area_charge'] ?? 0);
@@ -377,18 +690,54 @@ class EstimatePricingController extends Controller
                 if ($minCharge !== null && $baseTotal > $preMin) {
                     $breakdown[] = ['label' => 'Min charge', 'amount' => ($baseTotal - $preMin)];
                 }
-            } else {
-                $breakdown[] = ['label' => 'Base', 'amount' => $baseTotal];
-            }
-        } else {
-            $unitPriceStr = $this->pricing->baseUnitPrice($rp, $qty);
-            if ($unitPriceStr === null) {
-                return response()->json(['message' => 'Unable to resolve unit price.'], 422);
-            }
+	            } else {
+	                $breakdown[] = ['label' => 'Base', 'amount' => $baseTotal];
+	            }
 
-            $baseTotal = (float) $unitPriceStr * $qty;
-            $total += $baseTotal;
-            $breakdown[] = ['label' => 'Base', 'amount' => $baseTotal];
+	            // Variant pricing (additive, public-style)
+	            if ($vp && $vp->is_active) {
+	                if ($vp->fixed_price !== null) {
+	                    $variantTotal = (float) $vp->fixed_price * $qty;
+	                } elseif ($vp->rate_per_sqft !== null) {
+	                    $calcVar = $this->dimensions->calculateDimensionPrice(
+	                        (float) $widthIn,
+	                        (float) $heightIn,
+	                        (float) $qty,
+	                        (float) $vp->rate_per_sqft,
+	                        $vp->offcut_rate_per_sqft !== null ? (float) $vp->offcut_rate_per_sqft : null,
+	                        $vp->min_charge !== null ? (float) $vp->min_charge : null,
+	                        $rollWidthIn
+	                    );
+	                    $variantTotal = (float) ($calcVar['total'] ?? 0);
+	                }
+	                if ($variantTotal > 0) {
+	                    $breakdown[] = ['label' => 'Variants', 'amount' => $variantTotal];
+	                }
+	            }
+	        } else {
+	            $unitPriceStr = null;
+
+	            $unitPriceStr = $this->pricing->baseUnitPrice($rp, $qty);
+
+	            if ($unitPriceStr === null) {
+	                return response()->json(['message' => 'Unable to resolve unit price.'], 422);
+	            }
+
+	            $baseTotal = (float) $unitPriceStr * $qty;
+	            $total = $baseTotal;
+	            $breakdown[] = ['label' => 'Base', 'amount' => $baseTotal];
+
+	            // Variant pricing (additive, fixed only for unit-mode)
+	            if ($vp && $vp->is_active && $vp->fixed_price !== null) {
+	                $variantTotal = (float) $vp->fixed_price * $qty;
+	                if ($variantTotal > 0) {
+	                    $breakdown[] = ['label' => 'Variants', 'amount' => $variantTotal];
+	                }
+	            }
+	        }
+
+        if ($variantLabel) {
+            $breakdown[] = ['label' => 'Variant', 'amount' => 0, 'meta' => ['label' => $variantLabel]];
         }
 
         // Finishings (optional; future-proof)
@@ -411,7 +760,6 @@ class EstimatePricingController extends Controller
                 ->get(['id', 'status', 'product_type'])
                 ->keyBy('id');
 
-            $finishingTotal = 0.0;
             foreach ($validFinishingIds as $fid) {
                 $requestedQty = $finishingsInput[(string) $fid] ?? 0;
                 $requestedQty = is_numeric($requestedQty) ? (int) $requestedQty : 0;
@@ -422,13 +770,23 @@ class EstimatePricingController extends Controller
                 $fp = $this->pricing->finishingPricing($rp, (int) $fid);
                 $usedFallback = false;
 
-                if ($fp) {
+                $unit = null;
+                $line = null;
+                $mode = null;
+
+                if ($fp && $fp->is_active) {
                     if ($fp->price_per_piece !== null) {
-                        $finishingTotal += ((float) $fp->price_per_piece * $requestedQty);
-                    } elseif ($fp->flat_price !== null) {
-                        $finishingTotal += (float) $fp->flat_price;
+                        $unit = (float) $fp->price_per_piece;
+                        $line = $unit * $requestedQty;
+                        $mode = 'per_piece';
                     } elseif ($fp->price_per_side !== null) {
-                        $finishingTotal += ((float) $fp->price_per_side * $requestedQty);
+                        $unit = (float) $fp->price_per_side;
+                        $line = $unit * $requestedQty;
+                        $mode = 'per_side';
+                    } elseif ($fp->flat_price !== null) {
+                        $unit = (float) $fp->flat_price;
+                        $line = (float) $fp->flat_price;
+                        $mode = 'flat';
                     } else {
                         $usedFallback = true;
                     }
@@ -452,27 +810,50 @@ class EstimatePricingController extends Controller
                         continue;
                     }
 
-                    $finishingTotal += ((float) $unitFallback * $requestedQty);
+                    $unit = (float) $unitFallback;
+                    $line = $unit * $requestedQty;
+                    $mode = 'fallback_unit';
                 }
+
+                $finishingsTotal += (float) ($line ?? 0);
+                $finishingsRows[] = [
+                    'finishing_product_id' => (int) $fid,
+                    'label' => (string) ($finishingProductsById->get((int) $fid)?->name ?? ('Finishing #' . $fid)),
+                    'qty' => $requestedQty,
+                    'unit_price' => round((float) ($unit ?? 0), 2),
+                    'total' => round((float) ($line ?? 0), 2),
+                    'pricing_snapshot' => [
+                        'source' => 'admin.estimates.quote.finishings',
+                        'mode' => $mode,
+                        'qty' => $requestedQty,
+                        'unit_price' => $unit,
+                        'total' => $line,
+                        'captured_at' => now()->toISOString(),
+                    ],
+                ];
             }
 
-            if ($finishingTotal > 0) {
-                $total += $finishingTotal;
-                $breakdown[] = ['label' => 'Finishings', 'amount' => $finishingTotal];
+            if ($finishingsTotal > 0) {
+                $breakdown[] = ['label' => 'Finishings', 'amount' => $finishingsTotal];
             }
         }
 
-        $unitPrice = $qty > 0 ? ($total / $qty) : 0.0;
+	        $lineSubtotal = $baseTotal + $variantTotal;
+	        $total = $lineSubtotal + $finishingsTotal;
+	        $unitPrice = $qty > 0 ? ($lineSubtotal / $qty) : 0.0;
 
         $areaSqft = $isDimensionBased && isset($calc) && is_array($calc) ? (float) ($calc['area_sqft'] ?? 0) : null;
         $offcutSqft = $isDimensionBased && isset($calc) && is_array($calc) ? (float) ($calc['offcut_sqft'] ?? 0) : 0.0;
 
-        $pricingSnapshot = [
-            'source' => 'admin.estimates.quote',
-            'mode' => $isDimensionBased ? 'dimension' : 'unit',
-            'working_group_id' => $wg->id,
-            'product_id' => $product->id,
-            'qty' => $qty,
+	        $pricingSnapshot = [
+	            'source' => 'admin.estimates.quote',
+	            'mode' => $isDimensionBased ? 'dimension' : 'unit',
+	            'working_group_id' => $wg->id,
+	            'product_id' => $product->id,
+	            'qty' => $qty,
+	            'options' => $selectedByGroup,
+	            'variant_set_id' => $matchedVariantSetId,
+	            'variant_label' => $variantLabel,
             'requested' => $isDimensionBased ? [
                 'width' => (float) $w,
                 'height' => (float) $h,
@@ -484,32 +865,39 @@ class EstimatePricingController extends Controller
                 'rotated' => (bool) $selectedRollRotated,
                 'auto' => (bool) $selectedRollAuto,
             ] : null,
-            'breakdown' => $breakdown,
-            'total' => round($total, 2),
-            'captured_at' => now()->toISOString(),
-        ];
+	            'breakdown' => $breakdown,
+	            'base_total' => round($baseTotal, 2),
+	            'variant_total' => round($variantTotal, 2),
+	            'finishings_total' => round($finishingsTotal, 2),
+	            'total' => round($total, 2),
+	            'captured_at' => now()->toISOString(),
+	        ];
 
         return response()->json([
             'ok' => true,
-            'data' => [
-                'product_id' => $product->id,
-                'working_group_id' => $wg->id,
-                'qty' => $qty,
-                'unit_price' => round($unitPrice, 2),
-                'line_subtotal' => round($total, 2),
-                'discount_amount' => 0,
-                'tax_amount' => 0,
-                'line_total' => round($total, 2),
-                'width' => $isDimensionBased ? (float) $w : null,
-                'height' => $isDimensionBased ? (float) $h : null,
-                'unit' => $isDimensionBased ? $unit : null,
-                'area_sqft' => $areaSqft === null ? null : round($areaSqft, 4),
-                'offcut_sqft' => $isDimensionBased ? round($offcutSqft, 4) : 0,
-                'roll_id' => $isDimensionBased ? $selectedRollId : null,
-                'roll_auto' => $isDimensionBased ? (bool) $selectedRollAuto : false,
-                'roll_rotated' => $isDimensionBased ? (bool) $selectedRollRotated : false,
-                'pricing_snapshot' => $pricingSnapshot,
-            ],
-        ]);
+	            'data' => [
+	                'product_id' => $product->id,
+	                'working_group_id' => $wg->id,
+	                'qty' => $qty,
+	                'unit_price' => round($unitPrice, 2),
+	                'line_subtotal' => round($lineSubtotal, 2),
+	                'discount_amount' => 0,
+	                'tax_amount' => 0,
+	                'line_total' => round($lineSubtotal, 2),
+	                'width' => $isDimensionBased ? (float) $w : null,
+	                'height' => $isDimensionBased ? (float) $h : null,
+	                'unit' => $isDimensionBased ? $unit : null,
+	                'area_sqft' => $areaSqft === null ? null : round($areaSqft, 4),
+	                'offcut_sqft' => $isDimensionBased ? round($offcutSqft, 4) : 0,
+	                'roll_id' => $isDimensionBased ? $selectedRollId : null,
+	                'roll_auto' => $isDimensionBased ? (bool) $selectedRollAuto : false,
+	                'roll_rotated' => $isDimensionBased ? (bool) $selectedRollRotated : false,
+	                'variant_set_id' => $matchedVariantSetId,
+	                'variant_label' => $variantLabel,
+	                'options' => $selectedByGroup,
+	                'finishings' => $finishingsRows,
+	                'pricing_snapshot' => $pricingSnapshot,
+	            ],
+	        ]);
     }
 }

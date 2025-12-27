@@ -40,12 +40,18 @@
         $customerPhone = $snap['phone'] ?? ($invoice->order?->customer?->phone ?? null);
     @endphp
 
-    <div class="space-y-6">
-        @if (session('success'))
-            <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
-                {{ session('success') }}
-            </div>
-        @endif
+	    <div class="space-y-6">
+	        @if (session('success'))
+	            <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800">
+	                {{ session('success') }}
+	            </div>
+	        @endif
+
+	        @if (session('error'))
+	            <div class="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+	                {{ session('error') }}
+	            </div>
+	        @endif
 
         {{-- Header --}}
         <section
@@ -88,16 +94,25 @@
                     </div>
                 </div>
 
-                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
-                    <a href="{{ route('admin.orders.show', $invoice->order_id) }}"
-                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15">
-                        <span>View order</span>
-                    </a>
+	                <div class="flex flex-col gap-2 sm:flex-row sm:items-center">
+	                    <a href="{{ route('admin.orders.show', $invoice->order_id) }}"
+	                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15">
+	                        <span>View order</span>
+	                    </a>
 
-                    <a href="{{ route('admin.invoices.pdf', $invoice) }}"
-                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15">
-                        <span>PDF</span>
-                    </a>
+	                    @can('update', $invoice)
+	                        @if ($invoice->status === 'draft')
+	                            <a href="{{ route('admin.invoices.edit', $invoice) }}"
+	                                class="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15">
+	                                <span>Edit</span>
+	                            </a>
+	                        @endif
+	                    @endcan
+
+	                    <a href="{{ route('admin.invoices.pdf', $invoice) }}"
+	                        class="inline-flex items-center justify-center gap-2 rounded-xl bg-white/10 px-4 py-2 text-xs font-semibold text-white hover:bg-white/15">
+	                        <span>PDF</span>
+	                    </a>
 
                     <form method="POST" action="{{ route('admin.invoices.email', $invoice) }}">
                         @csrf
@@ -236,7 +251,11 @@
                                 </td>
                                 <td class="px-4 py-3 text-right">{{ $it->qty }}</td>
                                 <td class="px-4 py-3 text-right">{{ $currency }} {{ number_format((float) $it->unit_price, 2) }}</td>
-                                <td class="px-4 py-3 text-right font-bold">{{ $currency }} {{ number_format((float) $it->line_total, 2) }}</td>
+                                @php
+                                    $finTotal = (float) ($it->finishings?->sum('total') ?? 0);
+                                    $lineWithFin = (float) ($it->line_total ?? 0) + $finTotal;
+                                @endphp
+                                <td class="px-4 py-3 text-right font-bold">{{ $currency }} {{ number_format($lineWithFin, 2) }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -310,17 +329,70 @@
                     </table>
                 </div>
 
-                @can('addPayment', $invoice)
-                    <div class="mt-5">
-                        @if ($status === 'draft')
-                            <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
-                                Issue the invoice before adding payment entries.
-                            </div>
-                        @else
-                            <form method="POST" action="{{ route('admin.invoices.payments.add', $invoice) }}" class="grid grid-cols-1 md:grid-cols-6 gap-3">
-                                @csrf
+	                @can('addPayment', $invoice)
+	                    <div class="mt-5">
+	                        @if ($status === 'draft')
+	                            <div class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+	                                Issue the invoice before adding payment entries.
+	                            </div>
+	                        @elseif (in_array($status, ['void', 'refunded'], true))
+	                            <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+	                                This invoice is <span class="font-bold">{{ strtoupper($status) }}</span>. Payments are locked.
+	                            </div>
+	                        @else
+	                            {{-- Quick: mark paid-in-full (server calculates due) --}}
+	                            @if ($due > 0.00001)
+	                                <form method="POST" action="{{ route('admin.invoices.payments.mark-paid', $invoice) }}"
+	                                    class="mb-4 rounded-2xl border border-slate-200 bg-white p-4">
+	                                    @csrf
 
-                                <div class="md:col-span-1">
+	                                    <div class="flex flex-col gap-3 md:flex-row md:items-end md:justify-between">
+	                                        <div>
+	                                            <div class="text-xs font-black text-slate-900">Quick payment</div>
+	                                            <div class="mt-1 text-xs text-slate-600">
+	                                                Records one payment entry for the current balance due:
+	                                                <span class="font-bold text-slate-900">{{ $currency }} {{ number_format((float) $due, 2) }}</span>
+	                                            </div>
+	                                        </div>
+
+	                                        <button
+	                                            class="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-extrabold text-white hover:bg-emerald-700">
+	                                            Mark paid
+	                                        </button>
+	                                    </div>
+
+	                                    <div class="mt-3 grid grid-cols-1 gap-3 md:grid-cols-3">
+	                                        <div>
+	                                            <label class="block text-xs font-semibold text-slate-600">Method</label>
+	                                            <select name="method" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
+	                                                <option value="cash">cash</option>
+	                                                <option value="bank">bank</option>
+	                                                <option value="card">card</option>
+	                                                <option value="online">online</option>
+	                                            </select>
+	                                        </div>
+
+	                                        <div>
+	                                            <label class="block text-xs font-semibold text-slate-600">Reference</label>
+	                                            <input name="reference" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" placeholder="Slip/Txn ID">
+	                                        </div>
+
+	                                        <div>
+	                                            <label class="block text-xs font-semibold text-slate-600">Note</label>
+	                                            <input name="note" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm" placeholder="Optional">
+	                                        </div>
+	                                    </div>
+	                                </form>
+	                            @else
+	                                <div class="mb-4 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-xs text-emerald-800">
+	                                    This invoice has no balance due.
+	                                </div>
+	                            @endif
+
+	                            <form method="POST" action="{{ route('admin.invoices.payments.add', $invoice) }}" class="grid grid-cols-1 md:grid-cols-6 gap-3">
+	                                @csrf
+
+	                                <div class="md:col-span-1">
                                     <label class="block text-xs font-semibold text-slate-600">Method</label>
                                     <select name="method" class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm">
                                         <option value="cash">cash</option>
@@ -331,12 +403,13 @@
                                     </select>
                                 </div>
 
-                                <div class="md:col-span-1">
-                                    <label class="block text-xs font-semibold text-slate-600">Amount (can be -)</label>
-                                    <input name="amount"
-                                        class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                        placeholder="5000 or -500">
-                                </div>
+	                                <div class="md:col-span-1">
+	                                    <label class="block text-xs font-semibold text-slate-600">Amount (can be -)</label>
+	                                    <input name="amount"
+	                                        class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+	                                        value="{{ $due > 0.00001 ? number_format((float) $due, 2, '.', '') : '' }}"
+	                                        placeholder="5000 or -500">
+	                                </div>
 
                                 <div class="md:col-span-1">
                                     <label class="block text-xs font-semibold text-slate-600">Paid at</label>
