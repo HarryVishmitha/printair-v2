@@ -66,20 +66,22 @@
 	</head>
 @php
     $user = auth()->user();
+    $dashboardRouteName = $user?->dashboardRouteName() ?? 'dashboard';
+    $isStaff = $user?->isStaff() ?? false;
 
     /**
      * CENTRAL NAV CONFIG
      * Edit all navigation links here in one place.
      */
-    $navSections = [
+    $staffNavSections = [
         [
             'label' => null,
             'items' => [
                 [
                     'label' => 'Dashboard',
                     'icon' => 'solar:widget-5-bold-duotone',
-                    'route' => route('dashboard'),
-                    'active' => request()->routeIs('dashboard'),
+                    'route' => route($dashboardRouteName),
+                    'active' => request()->routeIs($dashboardRouteName),
                 ],
             ],
         ],
@@ -195,6 +197,39 @@
             ],
         ],
     ];
+
+    $portalNavSections = [
+        [
+            'label' => null,
+            'items' => [
+                [
+                    'label' => 'Dashboard',
+                    'icon' => 'solar:widget-5-bold-duotone',
+                    'route' => route($dashboardRouteName),
+                    'active' => request()->routeIs($dashboardRouteName),
+                ],
+            ],
+        ],
+        [
+            'label' => 'Account',
+            'items' => [
+                [
+                    'label' => 'Notifications',
+                    'icon' => 'solar:bell-bing-bold-duotone',
+                    'route' => route('notifications.index'),
+                    'active' => request()->routeIs('notifications.*'),
+                ],
+                [
+                    'label' => 'Profile',
+                    'icon' => 'solar:user-circle-bold-duotone',
+                    'route' => route('profile.edit'),
+                    'active' => request()->routeIs('profile.*'),
+                ],
+            ],
+        ],
+    ];
+
+    $navSections = $isStaff ? $staffNavSections : $portalNavSections;
 @endphp
 
 <body class="font-sans antialiased bg-slate-50 text-slate-900 h-screen overflow-hidden">
@@ -207,7 +242,7 @@
                    -translate-x-full lg:translate-x-0">
             {{-- Logo only --}}
             <div class="h-16 flex items-center px-4 border-b border-slate-200">
-                <a href="{{ route('dashboard') }}" class="inline-flex items-center gap-2">
+                <a href="{{ route($dashboardRouteName) }}" class="inline-flex items-center gap-2">
                     <img src="{{ asset('assets/printair/printairlogo.png') }}" alt="Printair" class="h-15 w-auto">
                 </a>
             </div>

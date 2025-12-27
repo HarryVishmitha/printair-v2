@@ -20,6 +20,11 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->api(append: [
             \App\Http\Middleware\LogControllerActivity::class,
         ]);
+
+        $middleware->alias([
+            'staff' => \App\Http\Middleware\EnsureStaffUser::class,
+            'portal' => \App\Http\Middleware\EnsurePortalUser::class,
+        ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
         //

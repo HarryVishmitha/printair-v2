@@ -374,7 +374,7 @@
                 {{-- Right: Auth / Dashboard --}}
                 <div class="flex items-center justify-between gap-2 md:ml-auto md:justify-end md:gap-3">
                     @auth
-                        <a href="{{ route('dashboard') }}"
+                        <a href="{{ route(auth()->user()->dashboardRouteName()) }}"
                             class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 hover:border-red-500 hover:text-red-600 transition-colors">
                             <iconify-icon icon="mdi:view-dashboard-outline" class="text-[18px]"></iconify-icon>
                             <span>Dashboard</span>
@@ -559,7 +559,7 @@
 
                 <div class="border-t border-slate-200 px-4 py-3 space-y-2">
                     @auth
-                        <a href="{{ route('dashboard') }}"
+                        <a href="{{ route(auth()->user()->dashboardRouteName()) }}"
                             class="flex items-center justify-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-2 text-xs font-medium text-slate-800 hover:border-red-500 hover:text-red-600 transition-colors">
                             <span class="icon-[heroicons--squares-2x2] size-5"></span>
                             <span>Go to Dashboard</span>

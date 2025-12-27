@@ -13,7 +13,7 @@ class ContactOnboardingController extends Controller
 
         // If already has WhatsApp, no need to stay here
         if (! empty($user->whatsapp_number)) {
-            return redirect()->route('dashboard');
+            return redirect()->route($user->dashboardRouteName());
         }
 
         return view('auth.complete-contact', [
@@ -33,7 +33,7 @@ class ContactOnboardingController extends Controller
             'whatsapp_number' => $validated['whatsapp_number'],
         ]);
 
-        return redirect()->intended(route('dashboard'))
+        return redirect()->intended(route($user->dashboardRouteName(), absolute: false))
             ->with('status', 'Contact details completed. Welcome to Printair.');
     }
 }

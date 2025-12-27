@@ -80,7 +80,7 @@ class SocialLoginController extends Controller
             return redirect()->route('onboarding.contact');
         }
 
-        return redirect()->intended(route('dashboard'));
+        return redirect()->intended(route($user->dashboardRouteName(), absolute: false));
     }
 
     protected function extractFirstName(?string $fullName): string

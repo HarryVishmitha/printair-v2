@@ -41,7 +41,7 @@ class AuthenticatedSessionController extends Controller
             'login_status' => true,
         ]);
 
-        return redirect()->intended(route('dashboard', absolute: false));
+        return redirect()->intended(route($user->dashboardRouteName(), absolute: false));
     }
 
     /**

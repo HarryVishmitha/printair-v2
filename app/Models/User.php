@@ -242,6 +242,32 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->isSuperAdmin() || $this->isAdmin();
     }
 
+    /**
+     * Staff users are allowed into the back-office (/admin).
+     *
+     * This includes Admin/Super Admin and any role marked as staff (e.g. Manager).
+     */
+    public function isStaff(): bool
+    {
+        return $this->isAdminOrSuperAdmin() || ($this->role?->is_staff ?? false);
+    }
+
+    /**
+     * Normal (non-staff) users use the portal area (/portal).
+     */
+    public function isPortalUser(): bool
+    {
+        return ! $this->isStaff();
+    }
+
+    /**
+     * Get the correct dashboard route name for this user.
+     */
+    public function dashboardRouteName(): string
+    {
+        return $this->isStaff() ? 'admin.dashboard' : 'portal.dashboard';
+    }
+
     public function sendEmailVerificationNotification(): void
     {
         $this->notify(new VerifyEmailNotification);

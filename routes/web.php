@@ -9,6 +9,7 @@ use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\UserCustomerController;
 use App\Http\Controllers\Admin\WorkingGroupController;
+use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\NotificationController;
@@ -20,6 +21,7 @@ use App\Http\Controllers\Public\CustomerAddressController;
 use App\Http\Controllers\Public\InvoicePublicController;
 use App\Http\Controllers\Public\OrderPublicController;
 use App\Http\Middleware\EnsureCartNotEmpty;
+use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
@@ -134,8 +136,32 @@ Route::middleware(['auth', 'verified'])->group(function () {
         ->name('onboarding.contact.store');
 });
 
-Route::get('/dashboard', function () {
-    return view('dashboard');
+Route::prefix('portal')
+    ->name('portal.')
+    ->middleware(['auth', 'verified', 'portal'])
+    ->group(function () {
+        Route::view('/dashboard', 'dashboard')->name('dashboard');
+        Route::get('/dashboard/data', [DashboardController::class, 'portalData'])
+            ->middleware(['throttle:60,1'])
+            ->name('dashboard.data');
+    });
+
+Route::prefix('admin')
+    ->name('admin.')
+    ->middleware(['auth', 'verified', 'staff'])
+    ->group(function () {
+        Route::view('/dashboard', 'dashboard')->name('dashboard');
+        Route::get('/dashboard/data', [DashboardController::class, 'staffData'])
+            ->middleware(['throttle:60,1'])
+            ->name('dashboard.data');
+    });
+
+Route::get('/dashboard', function (Request $request) {
+    $user = $request->user();
+
+    return redirect()->to(
+        route($user->dashboardRouteName(), $request->query(), absolute: false)
+    );
 })->middleware(['auth', 'verified'])->name('dashboard');
 
 Route::prefix('admin')
