@@ -12,6 +12,7 @@ use App\Http\Controllers\Admin\WorkingGroupController;
 use App\Http\Controllers\DashboardController;
 use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PageController;
+use App\Http\Controllers\SitemapController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
 use App\Http\Controllers\Public\CartController;
@@ -23,6 +24,57 @@ use App\Http\Controllers\Public\OrderPublicController;
 use App\Http\Middleware\EnsureCartNotEmpty;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
+
+// ------------------------------
+// SEO (Sitemap + Robots)
+// ------------------------------
+Route::get('/sitemap.xml', [SitemapController::class, 'index'])
+    ->withoutMiddleware([
+        \App\Http\Middleware\ForcePasswordChange::class,
+        \App\Http\Middleware\LogControllerActivity::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+    ])
+    ->name('sitemap.index');
+
+Route::get('/sitemaps/pages.xml', [SitemapController::class, 'pages'])
+    ->withoutMiddleware([
+        \App\Http\Middleware\ForcePasswordChange::class,
+        \App\Http\Middleware\LogControllerActivity::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+    ])
+    ->name('sitemaps.pages');
+
+Route::get('/sitemaps/products.xml', [SitemapController::class, 'products'])
+    ->withoutMiddleware([
+        \App\Http\Middleware\ForcePasswordChange::class,
+        \App\Http\Middleware\LogControllerActivity::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+    ])
+    ->name('sitemaps.products');
+
+Route::get('/robots.txt', [SitemapController::class, 'robots'])
+    ->withoutMiddleware([
+        \App\Http\Middleware\ForcePasswordChange::class,
+        \App\Http\Middleware\LogControllerActivity::class,
+        \Illuminate\Cookie\Middleware\EncryptCookies::class,
+        \Illuminate\Cookie\Middleware\AddQueuedCookiesToResponse::class,
+        \Illuminate\Session\Middleware\StartSession::class,
+        \Illuminate\View\Middleware\ShareErrorsFromSession::class,
+        \Illuminate\Foundation\Http\Middleware\VerifyCsrfToken::class,
+    ])
+    ->name('robots');
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/home', [HomeController::class, 'index'])->name('home.home');
