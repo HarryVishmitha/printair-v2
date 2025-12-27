@@ -3,6 +3,7 @@
 namespace App\Services\Payments;
 
 use App\Models\Invoice;
+use App\Models\InvoicePayment;
 use App\Models\Order;
 use App\Models\Payment;
 use App\Models\PaymentAllocation;
@@ -135,6 +136,29 @@ class PaymentService
                 'created_at' => now(),
             ]);
 
+            // Mirror into invoice_payments ledger (for invoice-level payment history + adjustments).
+            InvoicePayment::create([
+                'invoice_id' => $invoice->id,
+                'method' => match ($payment->method) {
+                    'cash' => 'cash',
+                    'card' => 'card',
+                    'bank_transfer' => 'bank',
+                    'online_gateway' => 'online',
+                    default => 'cash',
+                },
+                'amount' => $amount,
+                'currency' => $payment->currency ?? 'LKR',
+                'paid_at' => $payment->received_at,
+                'reference' => $payment->reference_no,
+                'note' => null,
+                'created_by' => $actor->id,
+                'meta' => [
+                    'source' => 'payment_allocation',
+                    'payment_id' => $payment->id,
+                    'payment_allocation_id' => $alloc->id,
+                ],
+            ]);
+
             // Sync invoice financials + status
             $this->syncInvoiceAmounts($invoice);
             // Sync order payment status
@@ -154,13 +178,10 @@ class PaymentService
     {
         $invoice = Invoice::query()->whereKey($invoice->id)->lockForUpdate()->firstOrFail();
 
-        $paid = (string) $invoice->allocations()->sum('amount');
+        $paid = (string) $invoice->payments()->sum('amount');
         $grand = (string) $invoice->grand_total;
 
         $due = bcsub($grand, $paid, 2);
-        if (bccomp($due, '0', 2) === -1) {
-            $due = '0.00';
-        }
 
         // Update invoice status based on due
         $newStatus = $invoice->status;
@@ -168,7 +189,7 @@ class PaymentService
             // Keep terminal state
             $newStatus = $invoice->status;
         } else {
-            if (bccomp($due, '0', 2) === 0) {
+            if (bccomp($due, '0', 2) <= 0) {
                 $newStatus = 'paid';
             } elseif (bccomp($paid, '0', 2) === 1) {
                 $newStatus = 'partial';
@@ -237,4 +258,3 @@ class PaymentService
         // Wire into your activity_logs here later
     }
 }
-

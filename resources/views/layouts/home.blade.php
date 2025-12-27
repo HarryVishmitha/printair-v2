@@ -59,6 +59,9 @@
     navError: null,
     navData: null,
 
+    cartCount: 0,
+    cartCountLoading: false,
+
     async loadNavbarOnce() {
         if (this.navLoaded || this.navLoading) return;
 
@@ -81,7 +84,30 @@
             this.navLoading = false;
         }
     },
+
+    async loadCartCount() {
+        if (this.cartCountLoading) return;
+        this.cartCountLoading = true;
+
+        try {
+            const res = await fetch('{{ route('cart.show') }}?json=1', {
+                headers: { 'Accept': 'application/json' }
+            });
+
+            const data = await res.json().catch(() => ({}));
+            const items = (data?.cart?.items || []);
+            this.cartCount = Array.isArray(items)
+                ? items.reduce((sum, it) => sum + Number(it?.qty || 0), 0)
+                : 0;
+        } catch (e) {
+            this.cartCount = 0;
+        } finally {
+            this.cartCountLoading = false;
+        }
+    },
 }"
+    x-init="loadCartCount()"
+    @cart-updated.window="loadCartCount()"
     @keydown.window.escape="navMegaOpen = false; mobileNavOpen = false">
 
     <!-- Home Layout -->
@@ -144,12 +170,23 @@
                     <span class="sr-only">Printair Advertising</span>
                 </a>
 
-                <button type="button"
-                    class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 p-2.5 text-slate-700 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors"
-                    aria-label="Open navigation" @click="mobileNavOpen = true; loadNavbarOnce()">
-                    <iconify-icon icon="gg:menu-right" class="text-[22px]"></iconify-icon>
+                <div class="flex items-center gap-2">
+                    <a href="{{ route('cart.show') }}"
+                        class="relative inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 p-2.5 text-slate-700 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors"
+                        aria-label="Cart">
+                        <iconify-icon icon="mdi:cart-outline" class="text-[22px]"></iconify-icon>
+                        <span x-show="cartCount > 0" x-cloak
+                            class="absolute -top-1 -right-1 min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef233c] text-white text-[10px] font-extrabold flex items-center justify-center">
+                            <span x-text="cartCount"></span>
+                        </span>
+                    </a>
 
-                </button>
+                    <button type="button"
+                        class="inline-flex items-center justify-center rounded-full border border-slate-200 bg-slate-50 p-2.5 text-slate-700 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors"
+                        aria-label="Open navigation" @click="mobileNavOpen = true; loadNavbarOnce()">
+                        <iconify-icon icon="gg:menu-right" class="text-[22px]"></iconify-icon>
+                    </button>
+                </div>
             </div>
 
             {{-- 🔹 DESKTOP BRANDING (your original block, only md+) --}}
@@ -182,9 +219,20 @@
                     </label>
                 </form>
 
-                {{-- Desktop Mega Menu --}}
-                <div class="relative hidden shrink-0 md:block" @mouseenter="navMegaOpen = true; loadNavbarOnce()"
-                    @mouseleave="navMegaOpen = false" @click.outside="navMegaOpen = false">
+                {{-- Cart + Desktop Mega Menu --}}
+                <div class="hidden shrink-0 md:flex items-center gap-2">
+                    <a href="{{ route('cart.show') }}"
+                        class="relative inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors">
+                        <iconify-icon icon="mdi:cart-outline" class="text-[18px]"></iconify-icon>
+                        <span>Cart</span>
+                        <span x-show="cartCount > 0" x-cloak
+                            class="ml-1 inline-flex min-w-[18px] h-[18px] px-1 rounded-full bg-[#ef233c] text-white text-[10px] font-extrabold items-center justify-center">
+                            <span x-text="cartCount"></span>
+                        </span>
+                    </a>
+
+                    <div class="relative" @mouseenter="navMegaOpen = true; loadNavbarOnce()"
+                        @mouseleave="navMegaOpen = false" @click.outside="navMegaOpen = false">
 
                     <button type="button" @click="navMegaOpen = !navMegaOpen; if (navMegaOpen) loadNavbarOnce()"
                         class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors">
@@ -319,6 +367,8 @@
                             </div>
                         </div>
                     </div>
+                    </div>
+                </div>
                 </div>
 
                 {{-- Right: Auth / Dashboard --}}

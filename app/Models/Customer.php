@@ -32,6 +32,7 @@ class Customer extends Model
     protected $casts = [
         'email_notifications' => 'boolean',
         'sms_notifications'   => 'boolean',
+        'email_verified_at' => 'datetime',
     ];
 
     /* =======================
@@ -51,6 +52,11 @@ class Customer extends Model
     public function estimates(): HasMany
     {
         return $this->hasMany(Estimate::class, 'customer_id');
+    }
+
+    public function addresses(): HasMany
+    {
+        return $this->hasMany(CustomerAddress::class, 'customer_id');
     }
 
     public function orders(): HasMany

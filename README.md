@@ -7,6 +7,16 @@
 <a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
 </p>
 
+## Development seed data (optional)
+
+Default `php artisan db:seed` (or `sail artisan db:seed`) runs only baseline seeders via `database/seeders/DatabaseSeeder.php` and is safe for production.
+
+For local/dev demo data:
+
+- `php artisan db:seed --class=Database\\Seeders\\ProductSeeder`
+- `php artisan db:seed --class=Database\\Seeders\\QuotationSeeder`
+- `php artisan db:seed --class=Database\\Seeders\\DevSeeder` (runs both)
+
 ## About Laravel
 
 Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:

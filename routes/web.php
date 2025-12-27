@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\CategoryController;
 use App\Http\Controllers\Admin\AdminPricingController;
 use App\Http\Controllers\Admin\BillingController;
 use App\Http\Controllers\Admin\EstimateController;
+use App\Http\Controllers\Admin\InvoiceDocumentController;
 use App\Http\Controllers\Admin\OrderController;
 use App\Http\Controllers\Admin\ProductController;
 use App\Http\Controllers\Admin\UserCustomerController;
@@ -12,6 +13,12 @@ use App\Http\Controllers\HomeController;
 use App\Http\Controllers\PageController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\ProfileController;
+use App\Http\Controllers\Public\CartController;
+use App\Http\Controllers\Public\CheckoutController;
+use App\Http\Controllers\Public\CheckoutPageController;
+use App\Http\Controllers\Public\CustomerAddressController;
+use App\Http\Controllers\Public\InvoicePublicController;
+use App\Http\Controllers\Public\OrderPublicController;
 use Illuminate\Support\Facades\Route;
 
 Route::get('/', [HomeController::class, 'index'])->name('home');
@@ -38,6 +45,56 @@ Route::post('/contact', [PageController::class, 'sendContact'])
     ->name('contact.send');
 Route::get('/quote', [HomeController::class, 'quote'])->name('quotes');
 Route::get('/quote/create', [HomeController::class, 'quote'])->name('quotes.create');
+
+Route::get('/checkout', [CheckoutPageController::class, 'index'])->name('checkout.page');
+
+// ------------------------------
+// Cart + Checkout (Public)
+// ------------------------------
+Route::prefix('cart')->name('cart.')->group(function () {
+    Route::get('/', [CartController::class, 'show'])->name('show');
+    Route::post('/items', [CartController::class, 'addItem'])->name('items.add');
+
+    Route::patch('/items/{item}', [CartController::class, 'updateItem'])
+        ->middleware(['auth'])
+        ->name('items.update');
+    Route::delete('/items/{item}', [CartController::class, 'deleteItem'])
+        ->middleware(['auth'])
+        ->name('items.delete');
+
+    // Logged-in DB cart item upload
+    Route::post('/items/{item}/artwork-upload', [CartController::class, 'uploadArtwork'])
+        ->middleware(['auth'])
+        ->name('items.artwork.upload');
+    Route::post('/items/{item}/artwork-url', [CartController::class, 'saveArtworkUrl'])
+        ->middleware(['auth'])
+        ->name('items.artwork.url');
+
+    Route::post('/guest/items/artwork-url', [CartController::class, 'guestSaveArtworkUrl'])
+        ->name('guest.items.artwork.url');
+
+    Route::post('/guest/items/update', [CartController::class, 'guestUpdateItem'])
+        ->name('guest.items.update');
+    Route::post('/guest/items/delete', [CartController::class, 'guestDeleteItem'])
+        ->name('guest.items.delete');
+});
+
+Route::prefix('checkout')->name('checkout.')->group(function () {
+    Route::post('/guest/start', [CheckoutController::class, 'startGuest'])->name('guest.start');
+    Route::post('/guest/verify', [CheckoutController::class, 'verifyGuestOtp'])->name('guest.verify');
+    Route::post('/place-order', [CheckoutController::class, 'placeOrder'])->name('place');
+
+    Route::get('/addresses', [CustomerAddressController::class, 'index'])->name('addresses.index');
+    Route::post('/addresses', [CustomerAddressController::class, 'store'])->name('addresses.store');
+});
+
+Route::get('/orders/secure/{order}/{token}', [OrderPublicController::class, 'show'])
+    ->name('orders.public.show');
+
+Route::prefix('invoices')->name('invoices.')->group(function () {
+    Route::get('/{invoice}/view/{token}', [InvoicePublicController::class, 'show'])->name('public.show');
+    Route::get('/{invoice}/download/{token}', [InvoicePublicController::class, 'download'])->name('public.download');
+});
 
 // AJAX routes
 Route::get('/ajax/home/categories', [HomeController::class, 'categories'])
@@ -279,14 +336,20 @@ Route::prefix('admin')
     Route::post('/estimates/{estimate}/convert-to-order', [OrderController::class, 'createFromEstimate'])->name('orders.from-estimate');
     Route::post('/orders/{order}/confirm', [OrderController::class, 'confirm'])->name('orders.confirm');
     Route::post('/orders/{order}/status', [OrderController::class, 'changeStatus'])->name('orders.status');
+    Route::get('/orders/{order}/status-options', [OrderController::class, 'statusOptions'])->name('orders.status-options');
 
     // Billing (Invoices + Payments)
     Route::post('/orders/{order}/invoices', [BillingController::class, 'createInvoiceFromOrder'])->name('invoices.from-order');
+    Route::get('/invoices', [BillingController::class, 'invoicesIndex'])->name('invoices.index');
     Route::get('/invoices/{invoice}', [BillingController::class, 'showInvoice'])->name('invoices.show');
     Route::post('/invoices/{invoice}/issue', [BillingController::class, 'issueInvoice'])->name('invoices.issue');
     Route::post('/invoices/{invoice}/void', [BillingController::class, 'voidInvoice'])->name('invoices.void');
+    Route::post('/invoices/{invoice}/payments', [BillingController::class, 'addInvoicePayment'])->name('invoices.payments.add');
+    Route::get('/invoices/{invoice}/pdf', [InvoiceDocumentController::class, 'pdf'])->name('invoices.pdf');
+    Route::post('/invoices/{invoice}/email', [InvoiceDocumentController::class, 'email'])->name('invoices.email');
 
     Route::post('/payments', [BillingController::class, 'recordPayment'])->name('payments.store');
+    Route::get('/payments', [BillingController::class, 'paymentsIndex'])->name('payments.index');
     Route::get('/payments/{payment}', [BillingController::class, 'showPayment'])->name('payments.show');
     Route::post('/payments/{payment}/confirm', [BillingController::class, 'confirmPayment'])->name('payments.confirm');
     Route::post('/payments/{payment}/allocate/{invoice}', [BillingController::class, 'allocatePayment'])->name('payments.allocate');

@@ -157,7 +157,7 @@ class HomeController extends Controller
     public function privacy()
     {
         $seo = [
-            'title' => 'Privacy Policy | Printair Advertising',
+            'title' => 'Privacy Policy',
             'description' => 'Learn how Printair Advertising collects, uses, and protects your information, including design uploads and customer communication.',
             'keywords' => 'Printair privacy policy, printair.lk privacy, printing privacy, design file privacy, sri lanka printing',
             'canonical' => url('/privacy-policy'),
@@ -174,7 +174,7 @@ class HomeController extends Controller
     {
         $dashboard = $this->usertype();
         $seo = [
-            'title' => 'Terms & Conditions | Printair Advertising',
+            'title' => 'Terms & Conditions',
             'description' => 'Read Printair Advertising Terms & Conditions including orders, design approvals, production policy, working group pricing, warranties, payments, delivery, and liability.',
             'keywords' => 'Printair terms and conditions, printair.lk terms, printing terms sri lanka, design upload terms, warranty disclaimer',
             'canonical' => url('/terms-and-conditions'),
@@ -187,7 +187,7 @@ class HomeController extends Controller
     public function about()
     {
         $seo = [
-            'title' => 'About Us | Printair Advertising',
+            'title' => 'About Us',
             'description' => 'Learn about Printair Advertising—our story, values, production approach, and milestones as a modern design & printing partner in Sri Lanka.',
             'keywords' => 'Printair about, printair advertising, printing sri lanka, design and printing, corporate printing partner',
             'canonical' => url('/about-us'),
@@ -201,7 +201,7 @@ class HomeController extends Controller
     public function contact()
     {
         $seo = [
-            'title' => 'Contact Us | Printair Advertising',
+            'title' => 'Contact Us',
             'description' => 'Contact Printair Advertising for quotations, corporate partnerships, and printing services. Email, WhatsApp, or send a message through our contact form.',
             'keywords' => 'Printair contact, printair.lk contact, printing sri lanka contact, whatsapp printair',
             'canonical' => url('/contact'),
@@ -216,7 +216,7 @@ class HomeController extends Controller
     public function partners()
     {
         $seo = [
-            'title' => 'Partner Program | Printair Advertising',
+            'title' => 'Partner Program',
             'description' => 'Join Printair Advertising’s Partner Program to access wholesale pricing, priority production, and long-term print collaboration. Contact us via WhatsApp to become a partner.',
             'keywords' => 'Printair partner program, printair wholesale printing, printair business partners, printing partners sri lanka, printair whatsapp partner',
             'canonical' => url('/partners'),
@@ -231,7 +231,7 @@ class HomeController extends Controller
     public function products(Request $request)
     {
         $seo = [
-            'title' => 'Products | Printair Advertising',
+            'title' => 'Products',
             'description' => 'Browse Printair products with starting prices. Filter by category, search fast, and jump into details.',
             'keywords' => 'Printair products, printing products sri lanka, banners, stickers, business cards, offset printing, digital printing, large format printing',
             'canonical' => url('/products'),
@@ -252,7 +252,7 @@ class HomeController extends Controller
     public function services(Request $request)
     {
         $seo = [
-            'title' => 'Services | Printair Advertising',
+            'title' => 'Services',
             'description' => 'Browse Printair services with starting prices. Filter by category, search fast, and jump into details.',
             'keywords' => 'Printair services, printing services sri lanka, design services, installation services, branding services',
             'canonical' => url('/services'),
@@ -621,7 +621,7 @@ class HomeController extends Controller
         $seoKeywords = $product->seo?->seo_keywords ?? null;
 
         $seo = [
-            'title' => $seoTitle.' | Printair Advertising',
+            'title' => $seoTitle,
             'description' => $seoDesc,
             'keywords' => $seoKeywords,
             'canonical' => $product->seo?->canonical_url ?: route('products.show', $product->slug),

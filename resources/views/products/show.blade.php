@@ -3,6 +3,9 @@
         product: @js($productJson ?? []),
         initialWg: @js($initialWg ?? 'public'),
         pricingQuoteUrl: @js(route('products.price-quote', ['product' => $product->slug])),
+        cartAddUrl: @js(route('cart.items.add')),
+        cartUrl: @js(route('cart.show')),
+        cartUploadUrlTemplate: @js(route('cart.items.artwork.upload', ['item' => 0])),
         whatsappNumber: @js(config('printair.contact_whatsapp', '94768860175')),
         placeholderImage: @js(asset('assets/placeholders/product.png')),
     })" x-init="init()" class="bg-white">
@@ -249,56 +252,150 @@
                             </div>
                         </template>
 
-                        {{-- Artwork / Design (not for services) --}}
-                        <template x-if="product?.product_type !== 'service'">
-                            <div class="rounded-3xl border border-slate-200 bg-white p-5">
-                                <div class="flex items-center justify-between">
-                                    <h3 class="text-sm font-black text-slate-900">Artwork</h3>
-                                    <span class="text-xs text-slate-500">Choose one</span>
-                                </div>
+	                        {{-- Artwork / Design (not for services) --}}
+	                        <template x-if="product?.product_type !== 'service'">
+	                            <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+	                                <div class="flex items-start justify-between gap-4">
+	                                    <div>
+	                                        <h3 class="text-sm font-black text-slate-900 flex items-center gap-2">
+	                                            <span class="iconify text-slate-700" data-icon="mdi:palette-outline"></span>
+	                                            Artwork
+	                                        </h3>
+	                                        <p class="mt-1 text-xs text-slate-500">
+	                                            Upload your design (≤ 100MB) or paste a share link. You can also hire a Printair designer.
+	                                        </p>
+	                                    </div>
 
-                                <div class="mt-4 space-y-2">
-                                    <label
-                                        class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 cursor-pointer hover:border-[#ef233c]/40"
-                                        :class="state.artwork.mode === 'upload' ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : ''">
-                                        <input type="radio" class="accent-[#ef233c]" value="upload"
-                                            x-model="state.artwork.mode" @change="refreshPrice()">
-                                        <span class="text-sm font-semibold text-slate-800">Upload my design</span>
-                                    </label>
+	                                    <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700">
+	                                        <span class="iconify" data-icon="mdi:shield-check-outline"></span>
+	                                        Secure & private
+	                                    </span>
+	                                </div>
 
-                                    <label
-                                        class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 cursor-pointer hover:border-[#ef233c]/40"
-                                        :class="state.artwork.mode === 'hire' ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : ''">
-                                        <input type="radio" class="accent-[#ef233c]" value="hire"
-                                            x-model="state.artwork.mode" @change="refreshPrice()">
-                                        <span class="text-sm font-semibold text-slate-800">Hire Printair designer</span>
-                                    </label>
-                                </div>
+	                                {{-- Mode tiles --}}
+	                                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+	                                    <button type="button"
+	                                        class="text-left rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm"
+	                                        :class="state.artwork.mode === 'upload' ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : 'border-slate-200 bg-white'"
+	                                        @click="state.artwork.mode='upload'; refreshPrice()">
+	                                        <div class="flex items-start gap-3">
+	                                            <div class="h-10 w-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center">
+	                                               <iconify-icon icon="mdi:cloud-upload-outline" class="iconify text-lg"></iconify-icon>
+	                                            </div>
+	                                            <div>
+	                                                <div class="font-extrabold text-slate-900">Upload my design</div>
+	                                                <div class="text-xs text-slate-500 mt-1">PDF / AI / PSD / JPG / PNG</div>
+	                                            </div>
+	                                        </div>
+	                                    </button>
 
-                                <template x-if="state.artwork.mode === 'upload'">
-                                    <div class="mt-4">
-                                        <label class="block text-xs font-semibold text-slate-600">Upload file</label>
-                                        <input type="file"
-                                            class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                            @change="handleArtworkUpload($event)">
-                                        <p class="mt-2 text-xs text-slate-500">
-                                            AI, PSD, PDF, PNG, JPG accepted (final rules handled in admin).
-                                        </p>
-                                    </div>
-                                </template>
+	                                    <button type="button"
+	                                        class="text-left rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm"
+	                                        :class="state.artwork.mode === 'hire' ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : 'border-slate-200 bg-white'"
+	                                        @click="state.artwork.mode='hire'; refreshPrice()">
+	                                        <div class="flex items-start gap-3">
+	                                            <div class="h-10 w-10 rounded-2xl bg-[#ef233c] text-white flex items-center justify-center">
+	                                               <iconify-icon icon="mdi:account-star-outline" class="iconify text-lg"></iconify-icon>
+	                                            </div>
+	                                            <div>
+	                                                <div class="font-extrabold text-slate-900">Hire Printair designer</div>
+	                                                <div class="text-xs text-slate-500 mt-1">We’ll design it for you</div>
+	                                            </div>
+	                                        </div>
+	                                    </button>
+	                                </div>
 
-                                <template x-if="state.artwork.mode === 'hire'">
-                                    <div class="mt-4">
-                                        <label class="block text-xs font-semibold text-slate-600">Design brief</label>
-                                        <textarea
-                                            class="mt-1 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
-                                            rows="4"
-                                            placeholder="Tell us what you need (text, colors, theme, references, deadline)..."
-                                            x-model="state.artwork.brief" @input.debounce.400ms="refreshPrice()"></textarea>
-                                    </div>
-                                </template>
-                            </div>
-                        </template>
+	                                {{-- Upload panel --}}
+	                                <template x-if="state.artwork.mode === 'upload'">
+	                                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+	                                        <div class="flex items-center justify-between gap-4">
+	                                            <div class="text-sm font-black text-slate-900 flex items-center gap-2">
+	                                                <span class="iconify text-slate-700" data-icon="mdi:file-upload-outline"></span>
+	                                                Upload or Share Link
+	                                            </div>
+	                                            <div class="text-xs font-semibold text-slate-500">
+	                                                Max upload: <span class="text-slate-900">100MB</span>
+	                                            </div>
+	                                        </div>
+
+	                                        <div class="mt-3 gap-4">
+	                                            {{-- File upload --}}
+	                                            <div class="rounded-2xl border border-slate-200 bg-white p-4 mb-3">
+	                                                <label class="block text-xs font-semibold text-slate-600 mb-2">
+	                                                    Upload file (≤ 100MB)
+	                                                </label>
+
+	                                                <input type="file"
+	                                                    accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+	                                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+	                                                    @change="handleArtworkUpload($event)">
+
+	                                                <template x-if="state.artwork.file_name">
+	                                                    <div class="mt-3 flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+	                                                        <div class="min-w-0">
+	                                                            <div class="text-xs font-bold text-slate-900 truncate" x-text="state.artwork.file_name"></div>
+	                                                            <div class="text-[11px] text-slate-500" x-text="state.artwork.file_size_label"></div>
+	                                                        </div>
+	                                                        <button type="button"
+	                                                            class="text-xs font-bold text-slate-600 hover:text-slate-900"
+	                                                            @click="clearArtworkFile()">
+	                                                            Remove
+	                                                        </button>
+	                                                    </div>
+	                                                </template>
+
+	                                                <template x-if="state.artwork.too_large">
+	                                                    <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+	                                                        <span class="font-bold">File is larger than 100MB.</span>
+	                                                        Please upload it to a storage service (Google Drive/Dropbox/OneDrive) and paste the link in the field on the right.
+	                                                    </div>
+	                                                </template>
+	                                            </div>
+
+	                                            {{-- External URL (always visible) --}}
+	                                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+	                                                <label class="block text-xs font-semibold text-slate-600 mb-2">
+	                                                    Paste artwork share link (always available)
+	                                                </label>
+
+	                                                <div class="relative">
+	                                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+	                                                        <span class="iconify" data-icon="mdi:link-variant"></span>
+	                                                    </span>
+	                                                    <input type="url"
+	                                                        placeholder="https://drive.google.com/... or https://dropbox.com/..."
+	                                                        class="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
+	                                                        x-model="state.artwork.external_url"
+	                                                        @input.debounce.400ms="refreshPrice()" />
+	                                                </div>
+
+	                                                <div class="mt-2 text-[11px] text-slate-500">
+	                                                    If you upload a file, you can still add a link here (optional). Admins will see both.
+	                                                </div>
+	                                            </div>
+	                                        </div>
+	                                    </div>
+	                                </template>
+
+	                                {{-- Hire panel --}}
+	                                <template x-if="state.artwork.mode === 'hire'">
+	                                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+	                                        <label class="block text-xs font-semibold text-slate-600">Design brief</label>
+	                                        <textarea
+	                                            class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
+	                                            rows="4"
+	                                            placeholder="Tell us what you need (text, colors, theme, references, deadline)…"
+	                                            x-model="state.artwork.brief"
+	                                            @input.debounce.400ms="refreshPrice()"></textarea>
+
+	                                        <div class="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
+	                                            <span class="iconify" data-icon="mdi:information-outline"></span>
+	                                            We’ll confirm pricing after admin review.
+	                                        </div>
+	                                    </div>
+	                                </template>
+	                            </div>
+	                        </template>
 
                         {{-- Finishings --}}
                         <template x-if="product?.finishings?.length">
@@ -373,10 +470,25 @@
 
                         {{-- CTA --}}
                         <div class="rounded-3xl border border-slate-200 bg-white p-5">
+                            <template x-if="cart.toast.message">
+                                <div class="mb-3 rounded-2xl border px-4 py-3 text-sm"
+                                    :class="cart.toast.type === 'success'
+                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
+                                        : 'border-rose-200 bg-rose-50 text-rose-800'">
+                                    <div class="flex items-start gap-2">
+                                        <span class="iconify mt-[2px]"
+                                            :data-icon="cart.toast.type === 'success' ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'"></span>
+                                        <div x-text="cart.toast.message"></div>
+                                    </div>
+                                </div>
+                            </template>
+
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <button type="button"
-                                    class="w-full rounded-2xl bg-[#ef233c] text-white font-black py-3 hover:brightness-95">
-                                    Add to Cart
+                                    class="w-full rounded-2xl bg-[#ef233c] text-white font-black py-3 hover:brightness-95 disabled:opacity-60"
+                                    :disabled="cart.adding"
+                                    @click="addToCart()">
+                                    <span x-text="cart.adding ? 'Adding…' : 'Add to Cart'"></span>
                                 </button>
 
                                 <a :href="whatsappLink"
@@ -478,12 +590,18 @@
                     product,
                     initialWg,
                     pricingQuoteUrl,
+                    cartAddUrl,
+                    cartUrl,
+                    cartUploadUrlTemplate,
                     whatsappNumber,
                     placeholderImage
                 }) {
                     return {
                         product: product || {},
                         pricingQuoteUrl,
+                        cartAddUrl,
+                        cartUrl,
+                        cartUploadUrlTemplate,
                         whatsappNumber,
                         placeholderImage,
 
@@ -497,29 +615,39 @@
                         },
                         activeImageUrl: null,
 
-                        state: {
-                            wg: initialWg || 'public',
-                            qty: 1,
+	                        state: {
+	                            wg: initialWg || 'public',
+	                            qty: 1,
 
                             width: null,
                             height: null,
                             unit: 'in',
                             roll_id: '',
 
-                            options: {},
-                            finishings: {},
+	                            options: {},
+	                            finishings: {},
 
-                            artwork: {
-                                mode: 'upload',
-                                file: null,
-                                brief: '',
-                            },
-                        },
+	                            artwork: {
+	                                mode: 'upload',
+	                                file: null,
+	                                file_name: '',
+	                                file_size: 0,
+	                                file_size_label: '',
+	                                too_large: false,
+	                                external_url: '',
+	                                brief: '',
+	                            },
+	                        },
 
                         price: {
                             total: 0,
                             breakdown: [],
                             error: null,
+                        },
+
+                        cart: {
+                            adding: false,
+                            toast: { type: null, message: null },
                         },
 
 	                        _priceRequestId: 0,
@@ -584,11 +712,204 @@
 	                            this.refreshPrice();
 	                        },
 
-                        handleArtworkUpload(e) {
-                            const file = e?.target?.files?.[0] || null;
-                            this.state.artwork.file = file;
-                            this.refreshPrice();
+                        setCartToast(type, message) {
+                            this.cart.toast = { type, message };
+                            window.setTimeout(() => {
+                                if (this.cart.toast.message === message) {
+                                    this.cart.toast = { type: null, message: null };
+                                }
+                            }, 6500);
                         },
+
+                        async addToCart() {
+                            const productId = Number(this.product?.id);
+                            if (!Number.isFinite(productId) || productId <= 0) {
+                                this.setCartToast('error', 'Invalid product.');
+                                return;
+                            }
+
+                            const qty = Math.max(1, Number(this.state.qty || 1));
+
+                            const isDimensionBased = !!(this.product?.is_dimension_based || this.product?.requires_dimensions || this.product?.product_type === 'dimension_based');
+                            if (isDimensionBased) {
+                                const w = Number(this.state.width || 0);
+                                const h = Number(this.state.height || 0);
+                                if (!Number.isFinite(w) || !Number.isFinite(h) || w <= 0 || h <= 0) {
+                                    this.price.error = 'Width and height are required for this product.';
+                                    this.setCartToast('error', 'Please enter width and height.');
+                                    return;
+                                }
+                            }
+
+                            this.cart.adding = true;
+
+                            try {
+                                const matchedVariantSetId = (() => {
+                                    const matrix = Array.isArray(this.product?.variant_matrix) ? this.product.variant_matrix : [];
+                                    const selected = this.getSelectedOptionsMap();
+                                    if (!matrix.length || !Object.keys(selected).length) return null;
+
+                                    const groupIds = [...new Set(matrix.flatMap(r => Object.keys(r?.options || {}).map(x => Number(x)).filter(Boolean)))];
+                                    if (!groupIds.length) return null;
+
+                                    const isComplete = groupIds.every(gid => selected[gid]);
+                                    if (!isComplete) return null;
+
+                                    for (const row of matrix) {
+                                        const map = row?.options || {};
+                                        const ok = groupIds.every(gid => Number(map[gid]) === Number(selected[gid]));
+                                        if (ok) return Number(row.variant_set_id || null) || null;
+                                    }
+
+                                    return null;
+                                })();
+
+                                const meta = {
+                                    options: this.getSelectedOptionsMap(),
+                                    finishings: this.state.finishings || {},
+                                    artwork: {
+                                        mode: this.state.artwork.mode,
+                                        brief: this.state.artwork.brief,
+                                        external_url: this.state.artwork.external_url,
+                                        file_name: this.state.artwork.file_name,
+                                        file_size: this.state.artwork.file_size,
+                                        too_large: this.state.artwork.too_large,
+                                    },
+                                    artwork_external_url: this.state.artwork.external_url || null,
+                                    variant_set_id: matchedVariantSetId,
+                                };
+
+                                const pricing_snapshot = {
+                                    source: 'product_page',
+                                    total: Number(this.price.total || 0),
+                                    breakdown: Array.isArray(this.price.breakdown) ? this.price.breakdown : [],
+                                    input: {
+                                        wg: this.state.wg,
+                                        qty,
+                                        width: this.state.width,
+                                        height: this.state.height,
+                                        unit: this.state.unit,
+                                        roll_id: this.state.roll_id || null,
+                                        options: meta.options,
+                                        finishings: meta.finishings,
+                                        artwork: meta.artwork,
+                                    },
+                                };
+
+                                const payload = {
+                                    product_id: productId,
+                                    qty,
+                                    width: this.state.width || null,
+                                    height: this.state.height || null,
+                                    unit: this.state.unit || null,
+                                    roll_id: this.state.roll_id || null,
+                                    variant_set_item_id: null,
+                                    area_sqft: null,
+                                    offcut_sqft: null,
+                                    pricing_snapshot,
+                                    notes: null,
+                                    meta,
+                                };
+
+                                const res = await fetch(this.cartAddUrl, {
+                                    method: 'POST',
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'Content-Type': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
+                                            ?.getAttribute('content'),
+                                    },
+                                    body: JSON.stringify(payload),
+                                });
+
+                                const data = await res.json().catch(() => ({}));
+                                if (!res.ok || !data.ok) {
+                                    throw new Error(data?.message || 'Unable to add to cart.');
+                                }
+
+                                // Auto-upload artwork for logged-in users if a file is selected and valid.
+                                const dbItemId = Number(data?.data?.id || 0);
+                                const canUpload = dbItemId > 0 && !!this.state.artwork.file && !this.state.artwork.too_large;
+                                if (canUpload) {
+                                    const endpoint = String(this.cartUploadUrlTemplate).replace('/0/', `/${dbItemId}/`);
+                                    const fd = new FormData();
+                                    fd.append('file', this.state.artwork.file);
+
+                                    const up = await fetch(endpoint, {
+                                        method: 'POST',
+                                        headers: {
+                                            'Accept': 'application/json',
+                                            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
+                                                ?.getAttribute('content'),
+                                        },
+                                        body: fd,
+                                    });
+
+                                    const upData = await up.json().catch(() => ({}));
+                                    if (!up.ok || !upData.ok) {
+                                        this.setCartToast('error', upData?.message || 'Added to cart, but upload failed.');
+                                    }
+                                }
+
+                                this.setCartToast('success', 'Added to cart.');
+                                try {
+                                    window.dispatchEvent(new Event('cart-updated'));
+                                } catch (e) {}
+                            } catch (e) {
+                                this.setCartToast('error', e?.message || 'Failed to add to cart.');
+                            } finally {
+                                this.cart.adding = false;
+                            }
+                        },
+
+	                        formatBytes(bytes) {
+	                            if (!bytes && bytes !== 0) return '';
+	                            const sizes = ['B', 'KB', 'MB', 'GB'];
+	                            const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
+	                            const val = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2);
+	                            return `${val} ${sizes[i]}`;
+	                        },
+
+	                        clearArtworkFile() {
+	                            this.state.artwork.file = null;
+	                            this.state.artwork.file_name = '';
+	                            this.state.artwork.file_size = 0;
+	                            this.state.artwork.file_size_label = '';
+	                            this.state.artwork.too_large = false;
+	                        },
+
+	                        handleArtworkUpload(e) {
+	                            const file = e?.target?.files?.[0];
+	                            if (!file) return;
+
+	                            const maxBytes = 104857600; // 100MB
+
+	                            this.state.artwork.file_name = file.name;
+	                            this.state.artwork.file_size = file.size;
+	                            this.state.artwork.file_size_label = this.formatBytes(file.size);
+
+	                            if (file.size > maxBytes) {
+	                                this.state.artwork.too_large = true;
+	                                this.state.artwork.file = null;
+	                                e.target.value = '';
+	                                return;
+	                            }
+
+	                            this.state.artwork.too_large = false;
+
+	                            const allowedExt = ['pdf', 'ai', 'psd', 'png', 'jpg', 'jpeg'];
+	                            const ext = (file.name.split('.').pop() || '').toLowerCase();
+	                            if (!allowedExt.includes(ext)) {
+	                                this.state.artwork.file = null;
+	                                e.target.value = '';
+	                                alert('Invalid file type. Allowed: PDF, AI, PSD, JPG, PNG.');
+	                                return;
+	                            }
+
+	                            this.state.artwork.file = file;
+	                            this.refreshPrice();
+	                        },
 
                         getSelectedOptionsMap() {
                             const map = {};
@@ -708,6 +1029,7 @@
                                 artwork: {
                                     mode: this.state.artwork.mode,
                                     brief: this.state.artwork.brief,
+                                    external_url: this.state.artwork.external_url,
                                 },
                             };
 

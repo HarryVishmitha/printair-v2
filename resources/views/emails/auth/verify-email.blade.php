@@ -59,26 +59,20 @@
                     <tr>
                         <td class="header"
                             style="
-                                padding: 20px 0 10px 0;
+                                padding: 32px 0 24px 0;
                                 text-align: center;
+                                background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
                             ">
                             <a href="{{ config('app.url') }}"
                                 style="
-                                    color: #0f172a;
+                                    color: #ffffff;
                                     font-size: 18px;
                                     font-weight: 600;
                                     text-decoration: none;
                                     display: inline-block;
                                 ">
                                 <img src="{{ asset('assets/printair/printairlogo.png') }}" alt="Printair Advertising"
-                                    style="height: 60px; border: none; display: block; margin: 0 auto 6px auto;" />
-                                <div
-                                    style="
-                                        font-size: 11px;
-                                        color: #64748b;
-                                    ">
-                                    Secure Login System - Printair.lk
-                                </div>
+                                    style="height: 56px; border: none; display: block; margin: 0 auto;" />
                             </a>
                         </td>
                     </tr>
@@ -107,16 +101,14 @@
                                         ">
 
                                         {{-- Title --}}
-                                        <h1
-                                            style="
-                                                font-size: 32px;
-                                                margin: 0 0 12px 0;
-                                                font-weight: 600;
-                                                color: #0f172a;
-                                                text-align: center;
-                                            ">
-                                            Verify your email address
-                                        </h1>
+                                        <div style="background-color: #ff2828; padding: 16px 24px; margin: -32px -36px 24px -36px; text-align: center;">
+                                            <div style="font-size: 18px; font-weight: 800; color: #ffffff; margin: 0;">
+                                                Verify Your Email Address
+                                            </div>
+                                            <div style="font-size: 13px; color: rgba(255, 255, 255, 0.9); margin-top: 4px;">
+                                                Activate your Printair account
+                                            </div>
+                                        </div>
 
                                         {{-- Intro text --}}
                                         <p
@@ -206,9 +198,10 @@
                                                 font-size: 12px;
                                                 color: #475569;
                                                 word-break: break-all;
-                                                background-color:#dadada;
-                                                padding: 10px;
-                                                border-radius: 6px;
+                                                background-color:#f1f5f9;
+                                                padding: 12px;
+                                                border-radius: 10px;
+                                                border-left: 4px solid #ff2828;
                                             ">
                                             {{ $url }}
                                         </p>
@@ -220,35 +213,39 @@
                                                 margin: 18px 0;
                                             " />
 
-                                        <p
+                                        <div
                                             style="
-                                                margin: 0 0 14px 0;
-                                                font-size: 13px;
-                                                color: #64748b;
+                                                margin: 0 0 20px 0;
+                                                padding: 16px;
+                                                background: linear-gradient(to right, #fff5f5, #ffffff);
+                                                border-radius: 10px;
+                                                border-left: 4px solid #3b82f6;
                                             ">
-                                            If you did <strong>not</strong> create a Printair account, you can safely
-                                            ignore this email and no changes will be made.
-                                        </p>
+                                            <p style="margin: 0; font-size: 13px; color: #475569; line-height: 1.6;">
+                                                <strong style="color: #0f172a;">🔒 Security Notice:</strong> If you did <strong>not</strong> create a Printair account, you can safely ignore this email and no changes will be made.
+                                            </p>
+                                        </div>
 
                                         {{-- Signature --}}
-                                        <p
-                                            style="
-                                                margin: 0 0 4px 0;
-                                                font-size: 14px;
-                                                color: #0f172a;
-                                            ">
-                                            Thanks,<br />
-                                            <strong>Printair Advertising</strong>
-                                        </p>
-
-                                        <p
-                                            style="
-                                                margin: 4px 0 0 0;
-                                                font-size: 11px;
-                                                color: #94a3b8;
-                                            ">
-                                            printair.lk · Designs · Printing · Branding
-                                        </p>
+                                        <div style="padding-top: 20px; border-top: 1px solid #e2e8f0;">
+                                            <p
+                                                style="
+                                                    margin: 0 0 4px 0;
+                                                    font-size: 14px;
+                                                    color: #64748b;
+                                                ">
+                                                Thank you,
+                                            </p>
+                                            <p
+                                                style="
+                                                    margin: 0 0 8px 0;
+                                                    font-size: 16px;
+                                                    font-weight: 700;
+                                                    color: #0f172a;
+                                                ">
+                                                The Printair Team
+                                            </p>
+                                        </div>
                                     </td>
                                 </tr>
                             </table>
@@ -268,11 +265,23 @@
                                 <tr>
                                     <td class="content-cell"
                                         style="
-                                            padding: 24px 16px 8px 16px;
+                                            padding: 24px 16px;
                                             font-size: 12px;
                                             color: #94a3b8;
+                                            background-color: #f8fafc;
+                                            border-top: 1px solid #e2e8f0;
                                         ">
-                                        © {{ date('Y') }} Printair Advertising · printair.lk · You think it, we ink it.
+                                        <div style="margin-bottom: 8px;">
+                                            <strong style="color: #0f172a;">Printair Advertising</strong><br>
+                                            Your trusted partner for printing solutions
+                                        </div>
+                                        <div style="font-size: 11px;">
+                                            Email: <a href="mailto:contact@printair.lk" style="color: #ff2828; text-decoration: none;">contact@printair.lk</a> · 
+                                            Web: <a href="https://printair.lk" style="color: #ff2828; text-decoration: none;">printair.lk</a>
+                                        </div>
+                                        <div style="margin-top: 12px; font-size: 11px;">
+                                            © {{ date('Y') }} Printair Advertising. All rights reserved.
+                                        </div>
                                     </td>
                                 </tr>
                             </table>

@@ -190,11 +190,6 @@ class OrderFlowService
             Gate::authorize('changeStatus', [$order, $toStatus]);
         }
 
-        $allowed = ['confirmed', 'in_production', 'ready', 'out_for_delivery', 'completed', 'cancelled', 'refunded'];
-        if (! in_array($toStatus, $allowed, true)) {
-            throw ValidationException::withMessages(['status' => 'Invalid order status.']);
-        }
-
         return DB::transaction(function () use ($order, $actor, $toStatus, $meta) {
             $order = Order::query()->whereKey($order->id)->lockForUpdate()->firstOrFail();
 
@@ -204,10 +199,36 @@ class OrderFlowService
                 return $order;
             }
 
+            // Confirm is a dedicated workflow (sets confirmed_at + document lock)
+            if ($from === 'draft') {
+                throw ValidationException::withMessages([
+                    'status' => 'Confirm the order before changing its production/delivery status.',
+                ]);
+            }
+
             // Basic guard: don’t change after cancelled/refunded/completed unless you allow it
             if (in_array($from, ['cancelled', 'refunded', 'completed'], true)) {
                 throw ValidationException::withMessages([
                     'status' => 'This order is in a terminal state and cannot be changed.',
+                ]);
+            }
+
+            $fromKey = (string) $from;
+            if ($fromKey === 'processing') {
+                // legacy alias
+                $fromKey = 'in_production';
+            }
+
+            $transitions = [
+                'confirmed' => ['in_production', 'cancelled', 'refunded'],
+                'in_production' => ['confirmed', 'ready', 'cancelled', 'refunded'],
+                'ready' => ['in_production', 'out_for_delivery', 'cancelled', 'refunded'],
+                'out_for_delivery' => ['ready', 'completed', 'cancelled', 'refunded'],
+            ];
+
+            if (! isset($transitions[$fromKey]) || ! in_array($toStatus, $transitions[$fromKey], true)) {
+                throw ValidationException::withMessages([
+                    'status' => "Invalid status transition from {$from} to {$toStatus}.",
                 ]);
             }
 
@@ -283,4 +304,3 @@ class OrderFlowService
         ]);
     }
 }
-

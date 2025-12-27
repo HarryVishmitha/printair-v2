@@ -21,6 +21,7 @@ class Invoice extends Model
     protected $casts = [
         'customer_snapshot' => 'array',
         'meta' => 'array',
+        'pricing_snapshot' => 'array',
 
         'subtotal' => 'decimal:2',
         'discount_total' => 'decimal:2',
@@ -31,12 +32,16 @@ class Invoice extends Model
 
         'amount_paid' => 'decimal:2',
         'amount_due' => 'decimal:2',
+        'deposit_value' => 'decimal:2',
+        'deposit_required_amount' => 'decimal:2',
 
         'issued_at' => 'datetime',
         'due_at' => 'datetime',
         'paid_at' => 'datetime',
         'voided_at' => 'datetime',
         'locked_at' => 'datetime',
+        'pricing_frozen_at' => 'datetime',
+        'public_token_expires_at' => 'datetime',
     ];
 
     protected static function booted(): void
@@ -73,10 +78,15 @@ class Invoice extends Model
         return $this->hasMany(PaymentAllocation::class, 'invoice_id');
     }
 
-    public function payments(): BelongsToMany
+    public function allocatedPayments(): BelongsToMany
     {
         return $this->belongsToMany(Payment::class, 'payment_allocations', 'invoice_id', 'payment_id')
             ->withPivot(['amount', 'created_by', 'created_at']);
+    }
+
+    public function payments(): HasMany
+    {
+        return $this->hasMany(InvoicePayment::class, 'invoice_id')->latest('paid_at');
     }
 
     public function createdBy(): BelongsTo

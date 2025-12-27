@@ -29,6 +29,13 @@ class InvoicePolicy
         return $user->can('manage-orderFlow');
     }
 
+    public function addPayment(User $user, Invoice $invoice): bool
+    {
+        if (! $this->inSameWorkingGroup($user, $invoice->working_group_id)) return false;
+
+        return $user->can('manage-orderFlow');
+    }
+
     private function inSameWorkingGroup(User $user, int $wgId): bool
     {
         return (int) $user->working_group_id === (int) $wgId || $user->isAdminOrSuperAdmin();

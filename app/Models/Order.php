@@ -35,6 +35,9 @@ class Order extends Model
         'completed_at' => 'datetime',
         'cancelled_at' => 'datetime',
         'locked_at' => 'datetime',
+
+        'public_token_last_sent_at' => 'datetime',
+        'public_token_expires_at' => 'datetime',
     ];
 
     protected static function booted(): void

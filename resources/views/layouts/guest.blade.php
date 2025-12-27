@@ -43,6 +43,7 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=be-vietnam-pro:400,500,600,700,800,900&display=swap"
         rel="stylesheet" />
+    <script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
     <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js"></script>
     {{-- App assets --}}
     @vite(['resources/css/app.css', 'resources/js/app.js'])
@@ -78,7 +79,7 @@
         <main class="flex-1 flex items-center justify-center px-4 py-10">
             {{-- Left: brand / copy (hidden on small screens) --}}
             @php
-                $hideLeftSectionRoutes = ['estimates.public.show'];
+                $hideLeftSectionRoutes = ['estimates.public.show', 'orders.public.show', 'checkout.page', 'cart.show'];
                 $hideLeftSection = in_array(Route::currentRouteName(), $hideLeftSectionRoutes);
             @endphp
 

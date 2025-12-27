@@ -49,14 +49,21 @@
     <link rel="preconnect" href="https://fonts.bunny.net">
     <link href="https://fonts.bunny.net/css?family=be-vietnam-pro:400,500,600,700,800,900&display=swap"
         rel="stylesheet" />
+    {{-- <script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script> --}}
     <script src="https://code.iconify.design/iconify-icon/2.1.0/iconify-icon.min.js" defer></script>
 
-    {{-- App assets --}}
-    @vite(['resources/css/app.css', 'resources/js/app.js'])
+	    {{-- App assets --}}
+	    @vite(['resources/css/app.css', 'resources/js/app.js'])
 
-    {{-- Extra per-page head content --}}
-    @stack('head')
-</head>
+	    <style>
+	        [x-cloak] {
+	            display: none !important;
+	        }
+	    </style>
+
+	    {{-- Extra per-page head content --}}
+	    @stack('head')
+	</head>
 @php
     $user = auth()->user();
 
@@ -95,7 +102,7 @@
                 ],
                 [
                     'label' => 'Product Pricing Hub',
-                    'icon' => 'solar:box-bold-duotone',
+                    'icon' => 'tabler:basket-dollar',
                     'route' => route('admin.pricing.index'), // change route name if needed
                     'active' => request()->routeIs('admin.pricing.*'),
                     'visible' => $user?->can('manage-products') ?? false,
@@ -112,6 +119,28 @@
                     'active' => request()->routeIs('admin.estimates.*'),
                     'visible' => $user?->can('manage-orderFlow') ?? false,
                 ],
+                [
+                    'label' => 'Orders',
+                    'icon' => 'material-symbols:orders-outline',
+                    'route' => route('admin.orders.index'),
+                    'active' => request()->routeIs('admin.orders.*'),
+                    'visible' => $user?->can('manage-orderFlow') ?? false,
+                ],
+                [
+                    'label' => 'Invoices',
+                    'icon' => 'iconamoon:invoice-light',
+                    'route' => route('admin.invoices.index'),
+                    'active' => request()->routeIs('admin.invoices.*'),
+                    'visible' => $user?->can('manage-orderFlow') ?? false,
+                ],
+                [
+                    'label' => 'Payments',
+                    'icon' => 'solar:card-send-bold-duotone',
+                    'route' => route('admin.payments.index'),
+                    'active' => request()->routeIs('admin.payments.*'),
+                    'visible' => $user?->can('manage-orderFlow') ?? false,
+                ],
+                
             ],
         ],
         [
@@ -119,7 +148,7 @@
             'items' => [
                 [
                     'label' => 'Rolls',
-                    'icon' => 'solar:box-bold-duotone',
+                    'icon' => 'hugeicons:material-and-texture',
                     'route' => route('admin.rolls.index'), // change route name if needed
                     'active' => request()->routeIs('admin.rolls.*'),
                     'visible' => $user?->can('manage-rolls') ?? false,

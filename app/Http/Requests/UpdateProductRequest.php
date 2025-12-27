@@ -30,7 +30,7 @@ class UpdateProductRequest extends FormRequest
             'product_code' => [
                 'required',
                 'string',
-                'max:60',
+                'max:40',
                 'regex:/^[A-Z0-9\-_]+$/i',
                 Rule::unique('products', 'product_code')->ignore($product->id),
             ],

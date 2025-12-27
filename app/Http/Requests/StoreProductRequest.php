@@ -18,7 +18,7 @@ class StoreProductRequest extends FormRequest
         return [
             'category_id' => ['required', 'integer', 'exists:categories,id'],
 
-            'product_code' => ['required', 'string', 'max:60', 'regex:/^[A-Z0-9\-_]+$/i', 'unique:products,product_code'],
+            'product_code' => ['required', 'string', 'max:40', 'regex:/^[A-Z0-9\-_]+$/i', 'unique:products,product_code'],
             'name' => ['required', 'string', 'max:200'],
             'slug' => ['required', 'string', 'max:220', 'unique:products,slug'],
             'short_description' => ['nullable', 'string', 'max:255'],

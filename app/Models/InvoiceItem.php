@@ -4,7 +4,7 @@ namespace App\Models;
 
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
-use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\{BelongsTo, HasMany};
 
 class InvoiceItem extends Model
 {
@@ -56,5 +56,9 @@ class InvoiceItem extends Model
     {
         return $this->belongsTo(Roll::class, 'roll_id');
     }
-}
 
+    public function finishings(): HasMany
+    {
+        return $this->hasMany(InvoiceItemFinishing::class, 'invoice_item_id');
+    }
+}
