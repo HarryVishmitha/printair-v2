@@ -22,6 +22,12 @@ return Application::configure(basePath: dirname(__DIR__))
         ]);
 
         $middleware->alias([
+            // Core Laravel aliases (needed by routes/web.php)
+            'auth' => \Illuminate\Auth\Middleware\Authenticate::class,
+            'verified' => \Illuminate\Auth\Middleware\EnsureEmailIsVerified::class,
+            'can' => \Illuminate\Auth\Middleware\Authorize::class,
+            'throttle' => \Illuminate\Routing\Middleware\ThrottleRequests::class,
+
             'staff' => \App\Http\Middleware\EnsureStaffUser::class,
             'portal' => \App\Http\Middleware\EnsurePortalUser::class,
         ]);
