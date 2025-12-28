@@ -79,7 +79,6 @@ Route::get('/robots.txt', [SitemapController::class, 'robots'])
 Route::get('/', [HomeController::class, 'index'])->name('home');
 Route::get('/home', [HomeController::class, 'index'])->name('home.home');
 Route::get('/about-us', [HomeController::class, 'about'])->name('about');
-Route::get('/terms-and-conditions', [HomeController::class, 'terms'])->name('terms');
 Route::get('/privacy-policy', [HomeController::class, 'privacy'])->name('privacy');
 Route::get('/terms-and-conditions', [HomeController::class, 'termsAndConditions'])->name('terms.conditions');
 Route::get('/B2B/partners', [HomeController::class, 'partners'])->name('coop');
@@ -93,6 +92,8 @@ Route::post('/products/{product:slug}/price-quote', [HomeController::class, 'pro
     ->name('products.price-quote');
 Route::get('/services', [HomeController::class, 'services'])->name('services.index');
 Route::get('/pricing', [HomeController::class, 'pricing'])->name('pricing.index');
+Route::get('/categories/{category:slug}', [\App\Http\Controllers\Public\CategoryPageController::class, 'show'])
+    ->name('categories.show');
 Route::get('/contact', [PageController::class, 'contact'])
     ->name('contact');
 Route::post('/contact', [PageController::class, 'sendContact'])
@@ -137,9 +138,15 @@ Route::prefix('cart')->name('cart.')->group(function () {
 });
 
 Route::prefix('checkout')->name('checkout.')->middleware([EnsureCartNotEmpty::class])->group(function () {
-    Route::post('/guest/start', [CheckoutController::class, 'startGuest'])->name('guest.start');
-    Route::post('/guest/verify', [CheckoutController::class, 'verifyGuestOtp'])->name('guest.verify');
-    Route::post('/place-order', [CheckoutController::class, 'placeOrder'])->name('place');
+    Route::post('/guest/start', [CheckoutController::class, 'startGuest'])
+        ->middleware(['throttle:guest-otp-send'])
+        ->name('guest.start');
+    Route::post('/guest/verify', [CheckoutController::class, 'verifyGuestOtp'])
+        ->middleware(['throttle:guest-otp-verify'])
+        ->name('guest.verify');
+    Route::post('/place-order', [CheckoutController::class, 'placeOrder'])
+        ->middleware(['throttle:checkout-place-order'])
+        ->name('place');
 
     Route::get('/addresses', [CustomerAddressController::class, 'index'])->name('addresses.index');
     Route::post('/addresses', [CustomerAddressController::class, 'store'])->name('addresses.store');

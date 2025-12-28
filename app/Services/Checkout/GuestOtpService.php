@@ -15,7 +15,7 @@ class GuestOtpService
 
     public function start(string $email, string $whatsapp, ?string $name = null): Customer
     {
-        return DB::transaction(function () use ($email, $whatsapp, $name) {
+        [$customer, $otp] = DB::transaction(function () use ($email, $whatsapp, $name) {
             $wgId = \App\Models\WorkingGroup::getPublicId();
             if (! $wgId) {
                 throw new \RuntimeException('Public working group not configured.');
@@ -63,15 +63,17 @@ class GuestOtpService
                 'updated_at' => now(),
             ]);
 
-            Mail::send('emails.customer-otp', [
-                'otp' => $otp,
-                'expiresMinutes' => self::OTP_EXP_MIN,
-            ], function ($m) use ($email) {
-                $m->to($email)->subject('Printair Order Verification Code');
-            });
-
-            return $customer;
+            return [$customer, $otp];
         });
+
+        Mail::send('emails.customer-otp', [
+            'otp' => $otp,
+            'expiresMinutes' => self::OTP_EXP_MIN,
+        ], function ($m) use ($email) {
+            $m->to($email)->subject('Printair Order Verification Code');
+        });
+
+        return $customer;
     }
 
     public function verify(string $email, string $otp): ?Customer
@@ -134,4 +136,3 @@ class GuestOtpService
         return 'CUST-'.Str::upper(Str::random(8));
     }
 }
-

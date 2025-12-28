@@ -1,6 +1,6 @@
 @php
     $enabled = filter_var(config('services.analytics.enabled', true), FILTER_VALIDATE_BOOLEAN);
-    $ga4 = 'G-P93Z5D5Y8F';
+    $ga4 = config('services.analytics.ga4_measurement_id');
     $pixel = config('services.analytics.meta_pixel_id');
     $consentKey = 'printair_cookie_consent';
 @endphp

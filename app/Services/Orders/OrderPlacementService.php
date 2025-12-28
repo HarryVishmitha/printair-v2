@@ -15,6 +15,7 @@ use App\Services\Cart\CartService;
 use App\Services\Pricing\PricingResolverService;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -28,7 +29,9 @@ class OrderPlacementService
 
     public function placeDraft(array $payload): Order
     {
-        return DB::transaction(function () use ($payload) {
+        $rawToken = Str::random(64);
+
+        $order = DB::transaction(function () use ($payload, $rawToken) {
             $cart = $this->cart->getCart();
 
             $wgId = (int) ($payload['working_group_id'] ?? (\App\Models\WorkingGroup::getPublicId() ?: 1));
@@ -37,7 +40,6 @@ class OrderPlacementService
 
             $orderNo = $this->generateOrderNo($wgId);
 
-            $rawToken = Str::random(64);
             $order = Order::query()->create([
                 'uuid' => (string) Str::uuid(),
                 'order_no' => $orderNo,
@@ -101,25 +103,46 @@ class OrderPlacementService
                 'updated_by' => Auth::id() ?: $this->fallbackSystemUserId(),
             ]);
 
-            $secureUrl = route('orders.public.show', ['order' => $order->id, 'token' => $rawToken]);
-
-            if ($customer?->email) {
-                Mail::send('emails.order-submitted', [
-                    'order' => $order,
-                    'secureUrl' => $secureUrl,
-                ], function ($m) use ($customer) {
-                    $m->to($customer->email)->subject('Printair Order Submitted');
-                });
-            }
-
-            foreach ($this->adminRecipients() as $u) {
-                $u->notify(new NewOrderSubmitted($order));
-            }
-
             $this->cart->clear();
 
             return $order;
         });
+
+        $secureUrl = route('orders.public.show', ['order' => $order->id, 'token' => $rawToken]);
+
+        $customerEmail = $order->customer_email
+            ?? data_get($order->customer_snapshot, 'email')
+            ?? null;
+
+        if ($customerEmail) {
+            try {
+                Mail::send('emails.order-submitted', [
+                    'order' => $order,
+                    'secureUrl' => $secureUrl,
+                ], function ($m) use ($customerEmail) {
+                    $m->to($customerEmail)->subject('Printair Order Submitted');
+                });
+            } catch (\Throwable $e) {
+                Log::warning('Order submitted email failed', [
+                    'order_id' => $order->id,
+                    'to' => $customerEmail,
+                    'error' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        try {
+            foreach ($this->adminRecipients() as $u) {
+                $u->notify(new NewOrderSubmitted($order));
+            }
+        } catch (\Throwable $e) {
+            Log::warning('Order submitted notifications failed', [
+                'order_id' => $order->id,
+                'error' => $e->getMessage(),
+            ]);
+        }
+
+        return $order;
     }
 
     private function copyDbCartItemToOrder(Order $order, CartItem $ci, int $sortOrder): float

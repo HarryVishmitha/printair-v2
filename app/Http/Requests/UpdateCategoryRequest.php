@@ -44,6 +44,8 @@ class UpdateCategoryRequest extends FormRequest
 
             'icon_path' => ['nullable', 'string', 'max:500'],
             'cover_image_path' => ['nullable', 'string', 'max:500'],
+            'cover_image' => ['nullable', 'image', 'mimes:jpg,jpeg,png,webp', 'max:4096'],
+            'remove_cover_image' => ['nullable', 'boolean'],
 
             'sort_order' => ['nullable', 'integer', 'min:0'],
             'is_active' => ['nullable', 'boolean'],

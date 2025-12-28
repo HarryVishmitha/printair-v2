@@ -52,13 +52,40 @@ class HomeController extends Controller
 
     public function categories()
     {
-        $categories = \App\Models\Category::query()
+        $rows = \App\Models\Category::query()
             ->whereNull('parent_id')
             ->where('is_active', true)
             ->where('show_in_navbar', true)
-            ->select('id', 'name', 'slug', 'cover_image_path as image')
             ->orderBy('name')
-            ->get();
+            ->get(['id', 'name', 'slug', 'icon_path', 'cover_image_path']);
+
+        $categories = $rows
+            ->map(function (\App\Models\Category $c) {
+                $coverPath = is_string($c->cover_image_path) ? trim($c->cover_image_path) : '';
+
+                $imageUrl = null;
+                if ($coverPath !== '') {
+                    if (str_starts_with($coverPath, 'http://') || str_starts_with($coverPath, 'https://')) {
+                        $imageUrl = $coverPath;
+                    } elseif (str_starts_with($coverPath, '/')) {
+                        $imageUrl = url($coverPath);
+                    } elseif (str_starts_with($coverPath, 'storage/')) {
+                        $imageUrl = asset($coverPath);
+                    } else {
+                        $imageUrl = Storage::disk('public')->url($coverPath);
+                    }
+                }
+
+                return [
+                    'id' => $c->id,
+                    'name' => $c->name,
+                    'slug' => $c->slug,
+                    'icon' => $c->icon_path,
+                    'image' => $imageUrl,
+                    'cover_image_url' => $imageUrl,
+                ];
+            })
+            ->values();
 
         return response()->json($categories);
     }

@@ -290,8 +290,14 @@
                             <a :href="`/categories/${category.slug}`"
                                 class="group rounded-2xl border border-slate-200 bg-white overflow-hidden transition hover:-translate-y-1 hover:shadow-lg">
                                 <div class="h-28 bg-blue-100 overflow-hidden flex items-center justify-center">
+                                    <template x-if="category.image">
+                                        <img :src="category.image" :alt="category.name"
+                                            class="object-contain object-center transition group-hover:scale-110" />
+                                    </template>
+                                    <template x-if="!category.image">
                                     <iconify-icon :icon="category.icon ?? 'solar:layers-bold'"
                                         class="text-6xl text-slate-600 transition group-hover:text-red-500"></iconify-icon>
+                                    </template>
                                 </div>
 
                                 <div class="p-4 text-center">

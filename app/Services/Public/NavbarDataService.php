@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\Storage;
 
 class NavbarDataService
 {
-    public const CACHE_KEY = 'navbar.public.v1';
+    public const CACHE_KEY = 'navbar.public.v2';
 
     public function get(): array
     {
@@ -23,7 +23,7 @@ class NavbarDataService
                 ->where('show_in_navbar', 1)
                 ->orderBy('sort_order')
                 ->orderBy('id')
-                ->get(['id', 'name', 'slug', 'sort_order']);
+                ->get(['id', 'name', 'slug', 'sort_order', 'cover_image_path']);
 
             $categoryIds = $categories->pluck('id')->all();
 
@@ -63,11 +63,24 @@ class NavbarDataService
                 'categories' => $categories->map(function (Category $category) use ($productsByCategory, $placeholder): array {
                     $products = $productsByCategory->get($category->id, collect());
 
+                    $coverPath = is_string($category->cover_image_path) ? trim($category->cover_image_path) : '';
+                    $coverUrl = null;
+                    if ($coverPath !== '') {
+                        $coverUrl = match (true) {
+                            str_starts_with($coverPath, 'http://') || str_starts_with($coverPath, 'https://') => $coverPath,
+                            str_starts_with($coverPath, '/') => url($coverPath),
+                            str_starts_with($coverPath, 'storage/') => asset($coverPath),
+                            default => Storage::disk('public')->url($coverPath),
+                        };
+                    }
+
                     return [
                         'id' => $category->id,
                         'name' => $category->name,
                         'slug' => $category->slug,
-                        'url' => url('/category/'.$category->slug),
+                        'url' => route('categories.show', ['category' => $category->slug]),
+                        'cover_image_path' => $category->cover_image_path,
+                        'cover_image_url' => $coverUrl,
                         'products' => $products->map(function (Product $product) use ($placeholder): array {
                             $imageUrl = $placeholder;
                             $img = $product->primaryImage;

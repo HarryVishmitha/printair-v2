@@ -11,10 +11,13 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 
 class CategoryController extends Controller
 {
+    private const COVER_DIR = 'categories/covers';
+
     /**
      * Display a listing of the resource.
      */
@@ -124,18 +127,29 @@ class CategoryController extends Controller
      */
     public function store(StoreCategoryRequest $request)
     {
+        $newCoverPath = null;
+
         try {
             $user = Auth::user();
 
-            $category = DB::transaction(function () use ($request, $user) {
+            if ($request->hasFile('cover_image')) {
+                $newCoverPath = $request->file('cover_image')->storePublicly(self::COVER_DIR, 'public');
+            }
+
+            $category = DB::transaction(function () use ($request, $user, $newCoverPath) {
 
                 $data = $request->validated();
+                unset($data['cover_image'], $data['remove_cover_image']);
 
                 // Enforce tenant scope (important)
                 $data['working_group_id'] = $user->working_group_id;
 
                 // Normalize slug (stable URLs)
                 $data['slug'] = Str::slug($data['slug']);
+
+                if ($newCoverPath) {
+                    $data['cover_image_path'] = $newCoverPath;
+                }
 
                 // Parent scope protection (avoid linking to other tenant parents)
                 if (! empty($data['parent_id'])) {
@@ -176,6 +190,10 @@ class CategoryController extends Controller
                 ->with('success', "Category '{$category->name}' created successfully.");
 
         } catch (\Throwable $e) {
+
+            if ($newCoverPath) {
+                $this->deletePublicFileIfLocal($newCoverPath);
+            }
 
             Log::error('Category store failed', [
                 'user_id' => Auth::id(),
@@ -247,6 +265,8 @@ class CategoryController extends Controller
      */
     public function update(UpdateCategoryRequest $request, Category $category)
     {
+        $newCoverPath = null;
+
         try {
             $user = Auth::user();
 
@@ -254,14 +274,31 @@ class CategoryController extends Controller
                 abort(403);
             }
 
-            DB::transaction(function () use ($request, $category, $user) {
+            $removeCover = $request->boolean('remove_cover_image');
+            if ($request->hasFile('cover_image')) {
+                $newCoverPath = $request->file('cover_image')->storePublicly(self::COVER_DIR, 'public');
+                $removeCover = false;
+            }
+
+            $oldCoverPath = $category->cover_image_path;
+
+            DB::transaction(function () use ($request, $category, $user, $newCoverPath, $removeCover) {
                 $data = $request->validated();
+                unset($data['cover_image'], $data['remove_cover_image']);
 
                 // Keep it in the same tenant scope (don’t let form change ownership)
                 $data['working_group_id'] = $category->working_group_id ?? $user->working_group_id;
 
                 // Normalize slug
                 $data['slug'] = Str::slug($data['slug']);
+
+                if ($newCoverPath) {
+                    $data['cover_image_path'] = $newCoverPath;
+                }
+
+                if ($removeCover) {
+                    $data['cover_image_path'] = null;
+                }
 
                 // Parent scope protection + block self-parent (request already blocks self)
                 if (! empty($data['parent_id'])) {
@@ -285,6 +322,10 @@ class CategoryController extends Controller
                 $category->update($data);
             });
 
+            if (($newCoverPath || $removeCover) && $oldCoverPath) {
+                $this->deletePublicFileIfLocal($oldCoverPath);
+            }
+
             ActivityLogger::log(
                 $user,
                 'category.updated',
@@ -302,6 +343,10 @@ class CategoryController extends Controller
                 ->with('success', "Category '{$category->name}' updated successfully.");
 
         } catch (\Throwable $e) {
+
+            if ($newCoverPath) {
+                $this->deletePublicFileIfLocal($newCoverPath);
+            }
 
             Log::error('Category update failed', [
                 'user_id' => Auth::id(),
@@ -395,5 +440,27 @@ class CategoryController extends Controller
 
             return back()->with('error', $message);
         }
+    }
+
+    private function deletePublicFileIfLocal(?string $path): void
+    {
+        $path = is_string($path) ? trim($path) : '';
+        if ($path === '') {
+            return;
+        }
+
+        if (str_starts_with($path, 'http://') || str_starts_with($path, 'https://')) {
+            return;
+        }
+
+        if (str_starts_with($path, '/')) {
+            return;
+        }
+
+        if (str_starts_with($path, 'storage/')) {
+            $path = substr($path, strlen('storage/'));
+        }
+
+        Storage::disk('public')->delete($path);
     }
 }

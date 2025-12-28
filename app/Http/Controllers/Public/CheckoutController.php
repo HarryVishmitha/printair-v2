@@ -27,7 +27,16 @@ class CheckoutController extends Controller
             'name' => ['nullable', 'string', 'max:120'],
         ]);
 
-        $customer = $this->otp->start($data['email'], $data['whatsapp'], $data['name'] ?? null);
+        try {
+            $customer = $this->otp->start($data['email'], $data['whatsapp'], $data['name'] ?? null);
+        } catch (\Throwable $e) {
+            report($e);
+
+            return response()->json([
+                'ok' => false,
+                'message' => 'Unable to send OTP right now. Please try again shortly.',
+            ], 422);
+        }
 
         session()->put('guest_checkout_email', $customer->email);
 
@@ -76,9 +85,9 @@ class CheckoutController extends Controller
             'customer.name' => ['nullable', 'string', 'max:120'],
             'customer.phone' => ['nullable', 'string', 'max:40'],
 
-            'shipping' => ['nullable', 'array'],
+            'shipping' => ['nullable', 'array', 'max:30'],
             'notes' => ['nullable', 'string', 'max:4000'],
-            'meta' => ['nullable', 'array'],
+            'meta' => ['nullable', 'array', 'max:50'],
         ]);
 
         if (!Auth::check()) {

@@ -31,6 +31,35 @@ class AppServiceProvider extends ServiceProvider
             return Limit::perMinutes(10, 5)->by($key);
         });
 
+        RateLimiter::for('guest-otp-send', function (Request $request) {
+            $email = (string) $request->input('email', '');
+            $email = strtolower(trim($email));
+            $key = 'guest-otp-send:'.($request->ip() ?? 'ip').':'.substr($email, 0, 120);
+
+            return Limit::perMinutes(10, 4)->by($key);
+        });
+
+        RateLimiter::for('guest-otp-verify', function (Request $request) {
+            $email = (string) $request->input('email', '');
+            $email = strtolower(trim($email));
+            $key = 'guest-otp-verify:'.($request->ip() ?? 'ip').':'.substr($email, 0, 120);
+
+            return Limit::perMinutes(10, 10)->by($key);
+        });
+
+        RateLimiter::for('checkout-place-order', function (Request $request) {
+            $userId = $request->user()?->getAuthIdentifier();
+            if ($userId) {
+                return Limit::perMinutes(5, 10)->by('checkout-place-order:user:'.$userId);
+            }
+
+            $email = (string) data_get($request->all(), 'customer.email', '');
+            $email = strtolower(trim($email));
+            $key = 'checkout-place-order:'.($request->ip() ?? 'ip').':'.substr($email, 0, 120);
+
+            return Limit::perMinutes(10, 4)->by($key);
+        });
+
         // Prevent sporadic Blade compilation failures when `storage/framework/*` folders are missing.
         $fs = $this->app->make(Filesystem::class);
         $fs->ensureDirectoryExists(storage_path('framework/views'));

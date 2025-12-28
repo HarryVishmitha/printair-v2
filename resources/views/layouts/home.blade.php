@@ -96,19 +96,17 @@
 
             const data = await res.json().catch(() => ({}));
             const items = (data?.cart?.items || []);
-            this.cartCount = Array.isArray(items)
-                ? items.reduce((sum, it) => sum + Number(it?.qty || 0), 0)
-                : 0;
+            this.cartCount = Array.isArray(items) ?
+                items.reduce((sum, it) => sum + Number(it?.qty || 0), 0) :
+                0;
         } catch (e) {
             this.cartCount = 0;
         } finally {
             this.cartCountLoading = false;
         }
     },
-}"
-    x-init="loadCartCount()"
-    @cart-updated.window="loadCartCount()"
-    @keydown.window.escape="navMegaOpen = false; mobileNavOpen = false">
+}" x-init="loadCartCount()"
+    @cart-updated.window="loadCartCount()" @keydown.window.escape="navMegaOpen = false; mobileNavOpen = false">
 
     <!-- Home Layout -->
     <!-- Top bar -->
@@ -234,175 +232,184 @@
                     <div class="relative" @mouseenter="navMegaOpen = true; loadNavbarOnce()"
                         @mouseleave="navMegaOpen = false" @click.outside="navMegaOpen = false">
 
-                    <button type="button" @click="navMegaOpen = !navMegaOpen; if (navMegaOpen) loadNavbarOnce()"
-                        class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors">
-                        <iconify-icon icon="mdi:apps" class="text-[18px]"></iconify-icon>
-                        <span>Categories</span>
-                        <iconify-icon icon="mdi:chevron-down" class="text-[18px]"></iconify-icon>
-                    </button>
+                        <button type="button" @click="navMegaOpen = !navMegaOpen; if (navMegaOpen) loadNavbarOnce()"
+                            class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-4 py-2 text-sm font-semibold text-slate-800 shadow-sm hover:border-red-500 hover:text-red-600 transition-colors">
+                            <iconify-icon icon="mdi:apps" class="text-[18px]"></iconify-icon>
+                            <span>Categories</span>
+                            <iconify-icon icon="mdi:chevron-down" class="text-[18px]"></iconify-icon>
+                        </button>
 
-                    {{-- Panel --}}
-                    <div x-show="navMegaOpen" x-cloak @click.stop
-                        x-transition:enter="transition ease-out duration-150"
-                        x-transition:enter-start="opacity-0 translate-y-1"
-                        x-transition:enter-end="opacity-100 translate-y-0"
-                        x-transition:leave="transition ease-in duration-120"
-                        x-transition:leave-start="opacity-100 translate-y-0"
-                        x-transition:leave-end="opacity-0 translate-y-1"
-                        class="absolute right-0 mt-12 w-[920px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5 overflow-hidden z-50">
+                        {{-- Panel --}}
+                        <div x-show="navMegaOpen" x-cloak @click.stop
+                            x-transition:enter="transition ease-out duration-150"
+                            x-transition:enter-start="opacity-0 translate-y-1"
+                            x-transition:enter-end="opacity-100 translate-y-0"
+                            x-transition:leave="transition ease-in duration-120"
+                            x-transition:leave-start="opacity-100 translate-y-0"
+                            x-transition:leave-end="opacity-0 translate-y-1"
+                            class="absolute right-0 mt-12 w-[920px] max-w-[calc(100vw-2rem)] rounded-2xl border border-slate-200 bg-white shadow-xl ring-1 ring-black/5 overflow-hidden z-50">
 
-                        <div class="flex min-h-[360px]" x-data="{ activeIdx: 0 }">
+                            <div class="flex min-h-[360px]" x-data="{ activeIdx: 0 }">
 
-                            {{-- Left: category list --}}
-                            <div class="w-64 border-r border-slate-200 bg-slate-50/70 p-4">
-                                <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                    Browse
-                                </div>
-
-                                {{-- Skeleton for category list --}}
-                                <template x-if="navLoading && !navLoaded">
-                                    <div class="space-y-2">
-                                        <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
-                                        <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
-                                        <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
-                                        <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
-                                        <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
+                                {{-- Left: category list --}}
+                                <div class="w-64 border-r border-slate-200 bg-slate-50/70 p-4">
+                                    <div class="mb-3 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                        Browse
                                     </div>
-                                </template>
 
-                                {{-- Error --}}
-                                <template x-if="navError">
-                                    <div class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                                        <div class="font-semibold">Oops</div>
-                                        <div class="mt-1" x-text="navError"></div>
-                                    </div>
-                                </template>
-
-                                {{-- Categories (loaded) --}}
-                                <template x-if="navLoaded && navData?.categories?.length">
-                                    <div class="space-y-1 max-h-[300px] overflow-y-auto pr-1">
-                                        <template x-for="(cat, idx) in navData.categories" :key="cat.id">
-                                            <a :href="cat.url" @mouseenter="activeIdx = idx"
-                                                class="w-full group flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition"
-                                                :class="activeIdx === idx ?
-                                                    'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' :
-                                                    'text-slate-700 hover:bg-white hover:text-slate-900'">
-                                                <span class="truncate" x-text="cat.name"></span>
-                                                <iconify-icon icon="mdi:chevron-right"
-                                                    class="text-[18px] opacity-60 group-hover:opacity-90"></iconify-icon>
-                                            </a>
-                                        </template>
-                                    </div>
-                                </template>
-                            </div>
-
-                            {{-- Right: products grid --}}
-                            <div class="flex-1 p-5">
-
-                                {{-- Skeleton products grid --}}
-                                <template x-if="navLoading && !navLoaded">
-                                    <div class="grid grid-cols-3 gap-4">
-                                        <template x-for="i in 6" :key="i">
-                                            <div class="rounded-2xl border border-slate-200 p-3">
-                                                <div
-                                                    class="aspect-[4/3] w-full rounded-xl bg-slate-200/70 animate-pulse">
-                                                </div>
-                                                <div class="mt-3 h-4 w-4/5 rounded bg-slate-200/70 animate-pulse">
-                                                </div>
-                                                <div class="mt-2 h-4 w-2/5 rounded bg-slate-200/70 animate-pulse">
-                                                </div>
-                                            </div>
-                                        </template>
-                                    </div>
-                                </template>
-
-                                {{-- Loaded products --}}
-                                <template x-if="navLoaded && navData?.categories?.length">
-                                    <div>
-                                        <div class="mb-4 flex items-center justify-between">
-                                            <div>
-                                                <div
-                                                    class="text-xs font-semibold uppercase tracking-wide text-slate-500">
-                                                    Top picks
-                                                </div>
-                                                <div class="text-lg font-bold text-slate-900"
-                                                    x-text="navData.categories[activeIdx]?.name ?? ''"></div>
-                                            </div>
-
-                                            <a class="text-sm font-semibold text-red-600 hover:text-red-700"
-                                                :href="navData.categories[activeIdx]?.url">
-                                                View all →
-                                            </a>
+                                    {{-- Skeleton for category list --}}
+                                    <template x-if="navLoading && !navLoaded">
+                                        <div class="space-y-2">
+                                            <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
+                                            <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
+                                            <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
+                                            <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
+                                            <div class="h-10 rounded-xl bg-slate-200/70 animate-pulse"></div>
                                         </div>
+                                    </template>
 
-                                        <div class="grid grid-cols-3 gap-4">
-                                            <template x-for="p in (navData.categories[activeIdx]?.products ?? [])"
-                                                :key="p.id">
-                                                <a :href="p.url" @click="navMegaOpen = false"
-                                                    class="group rounded-2xl border border-slate-200 bg-white p-3 shadow-sm hover:shadow-md hover:border-red-200 transition">
-                                                    <div class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
-                                                        <img :src="p.image_url" :alt="p.name"
-                                                            class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
-                                                    </div>
+                                    {{-- Error --}}
+                                    <template x-if="navError">
+                                        <div
+                                            class="rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
+                                            <div class="font-semibold">Oops</div>
+                                            <div class="mt-1" x-text="navError"></div>
+                                        </div>
+                                    </template>
 
-                                                    <div class="mt-3">
-                                                        <div class="line-clamp-1 text-sm font-semibold text-slate-900"
-                                                            x-text="p.name"></div>
-                                                        <div class="mt-1 text-sm font-bold text-slate-800"
-                                                            x-text="p.price?.formatted ?? '—'"></div>
-                                                    </div>
+                                    {{-- Categories (loaded) --}}
+                                    <template x-if="navLoaded && navData?.categories?.length">
+                                        <div class="space-y-1 max-h-[300px] overflow-y-auto pr-1">
+                                            <template x-for="(cat, idx) in navData.categories" :key="cat.id">
+                                                <a :href="cat.url" @mouseenter="activeIdx = idx"
+                                                    class="w-full group flex items-center justify-between rounded-xl px-3 py-2 text-sm font-semibold transition"
+                                                    :class="activeIdx === idx ?
+                                                        'bg-white text-slate-900 shadow-sm ring-1 ring-slate-200' :
+                                                        'text-slate-700 hover:bg-white hover:text-slate-900'">
+                                                    <span class="truncate" x-text="cat.name"></span>
+                                                    <template x-if="cat.cover_image_url">
+                                                        <img :src="cat.cover_image_url" :alt="cat.name"
+                                                            class="h-6 w-6 flex-shrink-0 rounded-full object-cover object-center ring-1 ring-slate-200" />
+                                                    </template>
+                                                    <template x-if="!cat.cover_image_url">
+                                                        <iconify-icon icon="mdi:chevron-right"
+                                                            class="text-[18px] opacity-60 group-hover:opacity-90"></iconify-icon>
+                                                    </template>
                                                 </a>
                                             </template>
                                         </div>
+                                    </template>
+                                </div>
 
-                                        <template x-if="(navData.categories[activeIdx]?.products ?? []).length === 0">
-                                            <div
-                                                class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-                                                No products found under this category yet.
+                                {{-- Right: products grid --}}
+                                <div class="flex-1 p-5">
+
+                                    {{-- Skeleton products grid --}}
+                                    <template x-if="navLoading && !navLoaded">
+                                        <div class="grid grid-cols-3 gap-4">
+                                            <template x-for="i in 6" :key="i">
+                                                <div class="rounded-2xl border border-slate-200 p-3">
+                                                    <div
+                                                        class="aspect-[4/3] w-full rounded-xl bg-slate-200/70 animate-pulse">
+                                                    </div>
+                                                    <div class="mt-3 h-4 w-4/5 rounded bg-slate-200/70 animate-pulse">
+                                                    </div>
+                                                    <div class="mt-2 h-4 w-2/5 rounded bg-slate-200/70 animate-pulse">
+                                                    </div>
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                    {{-- Loaded products --}}
+                                    <template x-if="navLoaded && navData?.categories?.length">
+                                        <div>
+                                            <div class="mb-4 flex items-center justify-between">
+                                                <div>
+                                                    <div
+                                                        class="text-xs font-semibold uppercase tracking-wide text-slate-500">
+                                                        Top picks
+                                                    </div>
+                                                    <div class="text-lg font-bold text-slate-900"
+                                                        x-text="navData.categories[activeIdx]?.name ?? ''"></div>
+                                                </div>
+
+                                                <a class="text-sm font-semibold text-red-600 hover:text-red-700"
+                                                    :href="navData.categories[activeIdx]?.url">
+                                                    View all →
+                                                </a>
                                             </div>
-                                        </template>
-                                    </div>
-                                </template>
 
+                                            <div class="grid grid-cols-3 gap-4">
+                                                <template x-for="p in (navData.categories[activeIdx]?.products ?? [])"
+                                                    :key="p.id">
+                                                    <a :href="p.url" @click="navMegaOpen = false"
+                                                        class="group rounded-2xl border border-slate-200 bg-white p-3 shadow-sm hover:shadow-md hover:border-red-200 transition">
+                                                        <div
+                                                            class="aspect-[4/3] overflow-hidden rounded-xl bg-slate-100">
+                                                            <img :src="p.image_url" :alt="p.name"
+                                                                class="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.04]" />
+                                                        </div>
+
+                                                        <div class="mt-3">
+                                                            <div class="line-clamp-1 text-sm font-semibold text-slate-900"
+                                                                x-text="p.name"></div>
+                                                            <div class="mt-1 text-sm font-bold text-slate-800"
+                                                                x-text="p.price?.formatted ?? '—'"></div>
+                                                        </div>
+                                                    </a>
+                                                </template>
+                                            </div>
+
+                                            <template
+                                                x-if="(navData.categories[activeIdx]?.products ?? []).length === 0">
+                                                <div
+                                                    class="rounded-2xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
+                                                    No products found under this category yet.
+                                                </div>
+                                            </template>
+                                        </div>
+                                    </template>
+
+                                </div>
                             </div>
                         </div>
                     </div>
-                    </div>
-                </div>
-                </div>
-
-                {{-- Right: Auth / Dashboard --}}
-                <div class="flex items-center justify-between gap-2 md:ml-auto md:justify-end md:gap-3">
-                    @auth
-                        <a href="{{ route(auth()->user()->dashboardRouteName()) }}"
-                            class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 hover:border-red-500 hover:text-red-600 transition-colors">
-                            <iconify-icon icon="mdi:view-dashboard-outline" class="text-[18px]"></iconify-icon>
-                            <span>Dashboard</span>
-                        </a>
-
-                        <span class="hidden text-xs font-medium text-slate-600 sm:inline">
-                            Hi, {{ Str::limit(auth()->user()->name, 14) }}
-                        </span>
-                    @endauth
-
-                    @guest
-                        <a href="{{ route('login') }}"
-                            class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-red-500 hover:text-red-600 transition-colors">
-                            <iconify-icon icon="mdi:login" class="text-[18px]"></iconify-icon>
-                            <span>Login</span>
-                        </a>
-
-                        <a href="{{ route('register') }}"
-                            class="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-red-700 transition-colors">
-                            <iconify-icon icon="mdi:account-plus-outline" class="text-[18px]"></iconify-icon>
-                            <span>Register</span>
-                        </a>
-                    @endguest
                 </div>
             </div>
 
-            {{-- 🔹 MOBILE: Full-width search under header --}}
-            {{-- <form action="#" method="GET" class="mt-3 md:hidden">
+            {{-- Right: Auth / Dashboard --}}
+            <div class="flex items-center justify-between gap-2 md:ml-auto md:justify-end md:gap-3">
+                @auth
+                    <a href="{{ route(auth()->user()->dashboardRouteName()) }}"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-slate-50 px-3 py-1.5 text-xs font-medium text-slate-800 hover:border-red-500 hover:text-red-600 transition-colors">
+                        <iconify-icon icon="mdi:view-dashboard-outline" class="text-[18px]"></iconify-icon>
+                        <span>Dashboard</span>
+                    </a>
+
+                    <span class="hidden text-xs font-medium text-slate-600 sm:inline">
+                        Hi, {{ Str::limit(auth()->user()->name, 14) }}
+                    </span>
+                @endauth
+
+                @guest
+                    <a href="{{ route('login') }}"
+                        class="inline-flex items-center gap-1.5 rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-medium text-slate-700 hover:border-red-500 hover:text-red-600 transition-colors">
+                        <iconify-icon icon="mdi:login" class="text-[18px]"></iconify-icon>
+                        <span>Login</span>
+                    </a>
+
+                    <a href="{{ route('register') }}"
+                        class="inline-flex items-center gap-1.5 rounded-full bg-red-600 px-3.5 py-1.5 text-xs font-semibold uppercase tracking-wide text-white hover:bg-red-700 transition-colors">
+                        <iconify-icon icon="mdi:account-plus-outline" class="text-[18px]"></iconify-icon>
+                        <span>Register</span>
+                    </a>
+                @endguest
+            </div>
+        </div>
+
+        {{-- 🔹 MOBILE: Full-width search under header --}}
+        {{-- <form action="#" method="GET" class="mt-3 md:hidden">
                 <label class="relative flex w-full items-center">
                     <span class="pointer-events-none absolute left-3">
                         <iconify-icon icon="mdi:magnify" class="text-slate-400 text-[18px]"></iconify-icon>
@@ -603,7 +610,12 @@
                 ['label' => 'Services', 'route' => 'services.index', 'match' => 'services.*', 'icon' => 'mdi:tools'],
                 ['label' => 'About', 'route' => 'about', 'match' => 'about', 'icon' => 'mdi:information-outline'],
                 ['label' => 'Contact', 'route' => 'contact', 'match' => 'contact', 'icon' => 'mdi:email-outline'],
-                ['label' => 'B2B: Co-Operative', 'route' => 'coop', 'match' => 'coop', 'icon' => 'material-symbols:handshake-outline-rounded']
+                [
+                    'label' => 'B2B: Co-Operative',
+                    'route' => 'coop',
+                    'match' => 'coop',
+                    'icon' => 'material-symbols:handshake-outline-rounded',
+                ],
             ];
 
             // Helper for active styling (route name matches)
