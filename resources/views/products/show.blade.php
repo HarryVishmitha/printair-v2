@@ -14,9 +14,7 @@
 
             {{-- Breadcrumbs --}}
             @php
-                $indexUrl = $product->product_type === 'service'
-                    ? route('services.index')
-                    : route('products.index');
+                $indexUrl = $product->product_type === 'service' ? route('services.index') : route('products.index');
                 $indexLabel = $product->product_type === 'service' ? 'Services' : 'Products';
             @endphp
             <nav class="text-sm text-slate-500 mb-6">
@@ -26,8 +24,8 @@
                 <template x-if="product?.category">
                     <span>
                         <span class="mx-2">/</span>
-                        <a :href="`{{ $indexUrl }}?category=${product.category.slug}`"
-                            class="hover:text-slate-700" x-text="product.category.name"></a>
+                        <a :href="`{{ $indexUrl }}?category=${product.category.slug}`" class="hover:text-slate-700"
+                            x-text="product.category.name"></a>
                     </span>
                 </template>
                 <span class="mx-2">/</span>
@@ -51,11 +49,9 @@
 
                     <template x-if="!loading.product">
                         <div>
-                            <div
-                                class="relative rounded-3xl border border-slate-200 overflow-hidden bg-slate-50">
+                            <div class="relative rounded-3xl border border-slate-200 overflow-hidden bg-slate-50">
                                 <img :src="activeImageUrl" :alt="product?.name ?? 'Product image'"
-                                    class="w-full h-[420px] sm:h-[520px] object-cover"
-                                    @click="lightbox.open = true" />
+                                    class="w-full h-[420px] sm:h-[520px] object-cover" @click="lightbox.open = true" />
 
                                 <div
                                     class="absolute bottom-4 left-4 rounded-full bg-black/70 text-white text-xs px-3 py-1.5">
@@ -67,7 +63,8 @@
                                 <template x-for="img in product.images" :key="img.id">
                                     <button type="button"
                                         class="relative shrink-0 h-20 w-20 rounded-2xl border overflow-hidden bg-white"
-                                        :class="img.url === activeImageUrl ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20' : 'border-slate-200 hover:border-slate-300'"
+                                        :class="img.url === activeImageUrl ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20' :
+                                            'border-slate-200 hover:border-slate-300'"
                                         @click="activeImageUrl = img.url">
                                         <img :src="img.url" class="h-full w-full object-cover" />
                                     </button>
@@ -86,8 +83,8 @@
                                     @click.self="lightbox.open=false">
                                     <div class="max-w-5xl w-full rounded-3xl overflow-hidden bg-white">
                                         <div class="flex items-center justify-between p-4 border-b border-slate-200">
-                                            <div class="text-sm font-semibold text-slate-900"
-                                                x-text="product?.name"></div>
+                                            <div class="text-sm font-semibold text-slate-900" x-text="product?.name">
+                                            </div>
                                             <button class="text-sm font-semibold text-slate-600 hover:text-slate-900"
                                                 @click="lightbox.open=false">Close</button>
                                         </div>
@@ -132,7 +129,8 @@
                                     </div>
 
                                     <template x-if="!loading.price && price.error">
-                                        <div class="mt-2 text-xs font-semibold text-rose-600" x-text="price.error"></div>
+                                        <div class="mt-2 text-xs font-semibold text-rose-600" x-text="price.error">
+                                        </div>
                                     </template>
                                 </div>
 
@@ -236,7 +234,9 @@
                                                 <template x-for="op in getGroupOptions(g)" :key="op.id">
                                                     <label
                                                         class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 hover:border-[#ef233c]/40 cursor-pointer"
-                                                        :class="Number(state.options[g.id]) === Number(op.id) ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : ''">
+                                                        :class="Number(state.options[g.id]) === Number(op.id) ?
+                                                            'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' :
+                                                            ''">
                                                         <input type="radio" class="accent-[#ef233c]"
                                                             :name="`option_group_${g.id}`" :value="op.id"
                                                             x-model="state.options[g.id]"
@@ -252,150 +252,169 @@
                             </div>
                         </template>
 
-	                        {{-- Artwork / Design (not for services) --}}
-	                        <template x-if="product?.product_type !== 'service'">
-	                            <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
-	                                <div class="flex items-start justify-between gap-4">
-	                                    <div>
-	                                        <h3 class="text-sm font-black text-slate-900 flex items-center gap-2">
-	                                            <span class="iconify text-slate-700" data-icon="mdi:palette-outline"></span>
-	                                            Artwork
-	                                        </h3>
-	                                        <p class="mt-1 text-xs text-slate-500">
-	                                            Upload your design (≤ 100MB) or paste a share link. You can also hire a Printair designer.
-	                                        </p>
-	                                    </div>
+                        {{-- Artwork / Design (not for services) --}}
+                        <template x-if="product?.product_type !== 'service'">
+                            <div class="rounded-3xl border border-slate-200 bg-white p-5 shadow-sm">
+                                <div class="flex items-start justify-between gap-4">
+                                    <div>
+                                        <h3 class="text-sm font-black text-slate-900 flex items-center gap-2">
+                                            <span class="iconify text-slate-700"
+                                                data-icon="mdi:palette-outline"></span>
+                                            Artwork
+                                        </h3>
+                                        <p class="mt-1 text-xs text-slate-500">
+                                            Upload your design (≤ 100MB) or paste a share link. You can also hire a
+                                            Printair designer.
+                                        </p>
+                                    </div>
 
-	                                    <span class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700">
-	                                        <span class="iconify" data-icon="mdi:shield-check-outline"></span>
-	                                        Secure & private
-	                                    </span>
-	                                </div>
+                                    <span
+                                        class="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-slate-50 px-3 py-1 text-[11px] font-semibold text-slate-700">
+                                        <span class="iconify" data-icon="mdi:shield-check-outline"></span>
+                                        Secure & private
+                                    </span>
+                                </div>
 
-	                                {{-- Mode tiles --}}
-	                                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
-	                                    <button type="button"
-	                                        class="text-left rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm"
-	                                        :class="state.artwork.mode === 'upload' ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : 'border-slate-200 bg-white'"
-	                                        @click="state.artwork.mode='upload'; refreshPrice()">
-	                                        <div class="flex items-start gap-3">
-	                                            <div class="h-10 w-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center">
-	                                               <iconify-icon icon="mdi:cloud-upload-outline" class="iconify text-lg"></iconify-icon>
-	                                            </div>
-	                                            <div>
-	                                                <div class="font-extrabold text-slate-900">Upload my design</div>
-	                                                <div class="text-xs text-slate-500 mt-1">PDF / AI / PSD / JPG / PNG</div>
-	                                            </div>
-	                                        </div>
-	                                    </button>
+                                {{-- Mode tiles --}}
+                                <div class="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+                                    <button type="button"
+                                        class="text-left rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm"
+                                        :class="state.artwork.mode === 'upload' ?
+                                            'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' :
+                                            'border-slate-200 bg-white'"
+                                        @click="state.artwork.mode='upload'; refreshPrice()">
+                                        <div class="flex items-start gap-3">
+                                            <div
+                                                class="h-10 w-10 rounded-2xl bg-slate-900 text-white flex items-center justify-center">
+                                                <iconify-icon icon="mdi:cloud-upload-outline"
+                                                    class="iconify text-lg"></iconify-icon>
+                                            </div>
+                                            <div>
+                                                <div class="font-extrabold text-slate-900">Upload my design</div>
+                                                <div class="text-xs text-slate-500 mt-1">PDF / AI / PSD / JPG / PNG
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </button>
 
-	                                    <button type="button"
-	                                        class="text-left rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm"
-	                                        :class="state.artwork.mode === 'hire' ? 'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' : 'border-slate-200 bg-white'"
-	                                        @click="state.artwork.mode='hire'; refreshPrice()">
-	                                        <div class="flex items-start gap-3">
-	                                            <div class="h-10 w-10 rounded-2xl bg-[#ef233c] text-white flex items-center justify-center">
-	                                               <iconify-icon icon="mdi:account-star-outline" class="iconify text-lg"></iconify-icon>
-	                                            </div>
-	                                            <div>
-	                                                <div class="font-extrabold text-slate-900">Hire Printair designer</div>
-	                                                <div class="text-xs text-slate-500 mt-1">We’ll design it for you</div>
-	                                            </div>
-	                                        </div>
-	                                    </button>
-	                                </div>
+                                    <button type="button"
+                                        class="text-left rounded-2xl border p-4 transition hover:-translate-y-[1px] hover:shadow-sm"
+                                        :class="state.artwork.mode === 'hire' ?
+                                            'border-[#ef233c] ring-2 ring-[#ef233c]/20 bg-[#ef233c]/[0.03]' :
+                                            'border-slate-200 bg-white'"
+                                        @click="state.artwork.mode='hire'; refreshPrice()">
+                                        <div class="flex items-start gap-3">
+                                            <div
+                                                class="h-10 w-10 rounded-2xl bg-[#ef233c] text-white flex items-center justify-center">
+                                                <iconify-icon icon="mdi:account-star-outline"
+                                                    class="iconify text-lg"></iconify-icon>
+                                            </div>
+                                            <div>
+                                                <div class="font-extrabold text-slate-900">Hire Printair designer</div>
+                                                <div class="text-xs text-slate-500 mt-1">We’ll design it for you</div>
+                                            </div>
+                                        </div>
+                                    </button>
+                                </div>
 
-	                                {{-- Upload panel --}}
-	                                <template x-if="state.artwork.mode === 'upload'">
-	                                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-	                                        <div class="flex items-center justify-between gap-4">
-	                                            <div class="text-sm font-black text-slate-900 flex items-center gap-2">
-	                                                <span class="iconify text-slate-700" data-icon="mdi:file-upload-outline"></span>
-	                                                Upload or Share Link
-	                                            </div>
-	                                            <div class="text-xs font-semibold text-slate-500">
-	                                                Max upload: <span class="text-slate-900">100MB</span>
-	                                            </div>
-	                                        </div>
+                                {{-- Upload panel --}}
+                                <template x-if="state.artwork.mode === 'upload'">
+                                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <div class="flex items-center justify-between gap-4">
+                                            <div class="text-sm font-black text-slate-900 flex items-center gap-2">
+                                                <span class="iconify text-slate-700"
+                                                    data-icon="mdi:file-upload-outline"></span>
+                                                Upload or Share Link
+                                            </div>
+                                            <div class="text-xs font-semibold text-slate-500">
+                                                Max upload: <span class="text-slate-900">100MB</span>
+                                            </div>
+                                        </div>
 
-	                                        <div class="mt-3 gap-4">
-	                                            {{-- File upload --}}
-	                                            <div class="rounded-2xl border border-slate-200 bg-white p-4 mb-3">
-	                                                <label class="block text-xs font-semibold text-slate-600 mb-2">
-	                                                    Upload file (≤ 100MB)
-	                                                </label>
+                                        <div class="mt-3 gap-4">
+                                            {{-- File upload --}}
+                                            <div class="rounded-2xl border border-slate-200 bg-white p-4 mb-3">
+                                                <label class="block text-xs font-semibold text-slate-600 mb-2">
+                                                    Upload file (≤ 100MB)
+                                                </label>
 
-	                                                <input type="file"
-	                                                    accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-	                                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-	                                                    @change="handleArtworkUpload($event)">
+                                                <input type="file"
+                                                    accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                                                    class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                                    @change="handleArtworkUpload($event)">
 
-	                                                <template x-if="state.artwork.file_name">
-	                                                    <div class="mt-3 flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
-	                                                        <div class="min-w-0">
-	                                                            <div class="text-xs font-bold text-slate-900 truncate" x-text="state.artwork.file_name"></div>
-	                                                            <div class="text-[11px] text-slate-500" x-text="state.artwork.file_size_label"></div>
-	                                                        </div>
-	                                                        <button type="button"
-	                                                            class="text-xs font-bold text-slate-600 hover:text-slate-900"
-	                                                            @click="clearArtworkFile()">
-	                                                            Remove
-	                                                        </button>
-	                                                    </div>
-	                                                </template>
+                                                <template x-if="state.artwork.file_name">
+                                                    <div
+                                                        class="mt-3 flex items-start justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2">
+                                                        <div class="min-w-0">
+                                                            <div class="text-xs font-bold text-slate-900 truncate"
+                                                                x-text="state.artwork.file_name"></div>
+                                                            <div class="text-[11px] text-slate-500"
+                                                                x-text="state.artwork.file_size_label"></div>
+                                                        </div>
+                                                        <button type="button"
+                                                            class="text-xs font-bold text-slate-600 hover:text-slate-900"
+                                                            @click="clearArtworkFile()">
+                                                            Remove
+                                                        </button>
+                                                    </div>
+                                                </template>
 
-	                                                <template x-if="state.artwork.too_large">
-	                                                    <div class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-	                                                        <span class="font-bold">File is larger than 100MB.</span>
-	                                                        Please upload it to a storage service (Google Drive/Dropbox/OneDrive) and paste the link in the field on the right.
-	                                                    </div>
-	                                                </template>
-	                                            </div>
+                                                <template x-if="state.artwork.too_large">
+                                                    <div
+                                                        class="mt-3 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                                        <span class="font-bold">File is larger than 100MB.</span>
+                                                        Please upload it to a storage service (Google
+                                                        Drive/Dropbox/OneDrive) and paste the link in the field on the
+                                                        right.
+                                                    </div>
+                                                </template>
+                                            </div>
 
-	                                            {{-- External URL (always visible) --}}
-	                                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
-	                                                <label class="block text-xs font-semibold text-slate-600 mb-2">
-	                                                    Paste artwork share link (always available)
-	                                                </label>
+                                            {{-- External URL (always visible) --}}
+                                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                                <label class="block text-xs font-semibold text-slate-600 mb-2">
+                                                    Paste artwork share link (always available)
+                                                </label>
 
-	                                                <div class="relative">
-	                                                    <span class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
-	                                                        <span class="iconify" data-icon="mdi:link-variant"></span>
-	                                                    </span>
-	                                                    <input type="url"
-	                                                        placeholder="https://drive.google.com/... or https://dropbox.com/..."
-	                                                        class="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
-	                                                        x-model="state.artwork.external_url"
-	                                                        @input.debounce.400ms="refreshPrice()" />
-	                                                </div>
+                                                <div class="relative">
+                                                    <span
+                                                        class="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400">
+                                                        <span class="iconify" data-icon="mdi:link-variant"></span>
+                                                    </span>
+                                                    <input type="url"
+                                                        placeholder="https://drive.google.com/... or https://dropbox.com/..."
+                                                        class="w-full rounded-xl border border-slate-200 bg-white pl-10 pr-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
+                                                        x-model="state.artwork.external_url"
+                                                        @input.debounce.400ms="refreshPrice()" />
+                                                </div>
 
-	                                                <div class="mt-2 text-[11px] text-slate-500">
-	                                                    If you upload a file, you can still add a link here (optional). Admins will see both.
-	                                                </div>
-	                                            </div>
-	                                        </div>
-	                                    </div>
-	                                </template>
+                                                <div class="mt-2 text-[11px] text-slate-500">
+                                                    If you upload a file, you can still add a link here (optional).
+                                                    Admins will see both.
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </template>
 
-	                                {{-- Hire panel --}}
-	                                <template x-if="state.artwork.mode === 'hire'">
-	                                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
-	                                        <label class="block text-xs font-semibold text-slate-600">Design brief</label>
-	                                        <textarea
-	                                            class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
-	                                            rows="4"
-	                                            placeholder="Tell us what you need (text, colors, theme, references, deadline)…"
-	                                            x-model="state.artwork.brief"
-	                                            @input.debounce.400ms="refreshPrice()"></textarea>
+                                {{-- Hire panel --}}
+                                <template x-if="state.artwork.mode === 'hire'">
+                                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4">
+                                        <label class="block text-xs font-semibold text-slate-600">Design brief</label>
+                                        <textarea
+                                            class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-[#ef233c]/20 focus:border-[#ef233c]/40"
+                                            rows="4" placeholder="Tell us what you need (text, colors, theme, references, deadline)…"
+                                            x-model="state.artwork.brief" @input.debounce.400ms="refreshPrice()"></textarea>
 
-	                                        <div class="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
-	                                            <span class="iconify" data-icon="mdi:information-outline"></span>
-	                                            We’ll confirm pricing after admin review.
-	                                        </div>
-	                                    </div>
-	                                </template>
-	                            </div>
-	                        </template>
+                                        <div class="mt-2 text-[11px] text-slate-500 flex items-center gap-2">
+                                            <span class="iconify" data-icon="mdi:information-outline"></span>
+                                            We’ll confirm pricing after admin review.
+                                        </div>
+                                    </div>
+                                </template>
+                            </div>
+                        </template>
 
                         {{-- Finishings --}}
                         <template x-if="product?.finishings?.length">
@@ -458,7 +477,8 @@
                                         <a :href="t.url"
                                             class="inline-flex items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 hover:border-slate-300">
                                             <div>
-                                                <div class="text-sm font-semibold text-slate-900" x-text="t.name"></div>
+                                                <div class="text-sm font-semibold text-slate-900" x-text="t.name">
+                                                </div>
                                                 <div class="text-xs text-slate-500">Template</div>
                                             </div>
                                             <span class="text-xs font-black text-[#ef233c]">Download</span>
@@ -472,12 +492,13 @@
                         <div class="rounded-3xl border border-slate-200 bg-white p-5">
                             <template x-if="cart.toast.message">
                                 <div class="mb-3 rounded-2xl border px-4 py-3 text-sm"
-                                    :class="cart.toast.type === 'success'
-                                        ? 'border-emerald-200 bg-emerald-50 text-emerald-800'
-                                        : 'border-rose-200 bg-rose-50 text-rose-800'">
+                                    :class="cart.toast.type === 'success' ?
+                                        'border-emerald-200 bg-emerald-50 text-emerald-800' :
+                                        'border-rose-200 bg-rose-50 text-rose-800'">
                                     <div class="flex items-start gap-2">
                                         <span class="iconify mt-[2px]"
-                                            :data-icon="cart.toast.type === 'success' ? 'mdi:check-circle-outline' : 'mdi:alert-circle-outline'"></span>
+                                            :data-icon="cart.toast.type === 'success' ? 'mdi:check-circle-outline' :
+                                                'mdi:alert-circle-outline'"></span>
                                         <div x-text="cart.toast.message"></div>
                                     </div>
                                 </div>
@@ -486,8 +507,7 @@
                             <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 <button type="button"
                                     class="w-full rounded-2xl bg-[#ef233c] text-white font-black py-3 hover:brightness-95 disabled:opacity-60"
-                                    :disabled="cart.adding"
-                                    @click="addToCart()">
+                                    :disabled="cart.adding" @click="addToCart()">
                                     <span x-text="cart.adding ? 'Adding…' : 'Add to Cart'"></span>
                                 </button>
 
@@ -528,7 +548,8 @@
                     <div class="rounded-3xl border border-slate-200 bg-white p-6">
                         <h2 class="text-lg font-black text-slate-900">Description</h2>
                         <div class="mt-3 prose prose-slate max-w-none">
-                            <p x-text="product?.description ?? 'No description provided.'"></p>
+                            {{-- <p x-text="product?.description ?? 'No description provided.'"></p> --}}
+                            <div x-html="product?.description ?? 'No description provided.'"></div>
                         </div>
                     </div>
                 </section>
@@ -615,29 +636,29 @@
                         },
                         activeImageUrl: null,
 
-	                        state: {
-	                            wg: initialWg || 'public',
-	                            qty: 1,
+                        state: {
+                            wg: initialWg || 'public',
+                            qty: 1,
 
                             width: null,
                             height: null,
                             unit: 'in',
                             roll_id: '',
 
-	                            options: {},
-	                            finishings: {},
+                            options: {},
+                            finishings: {},
 
-	                            artwork: {
-	                                mode: 'upload',
-	                                file: null,
-	                                file_name: '',
-	                                file_size: 0,
-	                                file_size_label: '',
-	                                too_large: false,
-	                                external_url: '',
-	                                brief: '',
-	                            },
-	                        },
+                            artwork: {
+                                mode: 'upload',
+                                file: null,
+                                file_name: '',
+                                file_size: 0,
+                                file_size_label: '',
+                                too_large: false,
+                                external_url: '',
+                                brief: '',
+                            },
+                        },
 
                         price: {
                             total: 0,
@@ -647,16 +668,19 @@
 
                         cart: {
                             adding: false,
-                            toast: { type: null, message: null },
+                            toast: {
+                                type: null,
+                                message: null
+                            },
                         },
 
-	                        _priceRequestId: 0,
-	                        _priceAbortController: null,
+                        _priceRequestId: 0,
+                        _priceAbortController: null,
 
-	                        get templates() {
-	                            const at = this.product?.attachments || [];
-	                            return at.filter(x => String(x.type || '').toLowerCase() === 'template');
-	                        },
+                        get templates() {
+                            const at = this.product?.attachments || [];
+                            return at.filter(x => String(x.type || '').toLowerCase() === 'template');
+                        },
 
                         get resources() {
                             const at = this.product?.attachments || [];
@@ -685,38 +709,44 @@
                             return `https://wa.me/${this.whatsappNumber}?text=${msg}`;
                         },
 
-	                        init() {
-	                            this.loading.product = false;
+                        init() {
+                            this.loading.product = false;
 
-	                            const imgs = Array.isArray(this.product?.images) ? [...this.product.images] : [];
-	                            imgs.sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0));
-	                            this.product.images = imgs;
+                            const imgs = Array.isArray(this.product?.images) ? [...this.product.images] : [];
+                            imgs.sort((a, b) => (a.sort_index ?? 0) - (b.sort_index ?? 0));
+                            this.product.images = imgs;
 
-	                            const featured = imgs.find(i => i.is_featured);
-	                            this.activeImageUrl = (featured?.url || imgs[0]?.url || this.placeholderImage);
+                            const featured = imgs.find(i => i.is_featured);
+                            this.activeImageUrl = (featured?.url || imgs[0]?.url || this.placeholderImage);
 
-	                            const finishings = Array.isArray(this.product?.finishings) ? this.product.finishings : [];
-	                            for (const f of finishings) {
-	                                const finishingId = Number(f?.finishing_product_id);
-	                                if (!Number.isFinite(finishingId) || finishingId <= 0) continue;
+                            const finishings = Array.isArray(this.product?.finishings) ? this.product.finishings : [];
+                            for (const f of finishings) {
+                                const finishingId = Number(f?.finishing_product_id);
+                                if (!Number.isFinite(finishingId) || finishingId <= 0) continue;
 
-	                                const existing = this.state.finishings?.[finishingId];
-	                                if (existing !== undefined && existing !== null && existing !== '') continue;
+                                const existing = this.state.finishings?.[finishingId];
+                                if (existing !== undefined && existing !== null && existing !== '') continue;
 
-	                                const defaultQty = Number(f?.default_qty ?? (f?.is_required ? (f?.min_qty ?? 1) : 0));
-	                                if (Number.isFinite(defaultQty) && defaultQty > 0) {
-	                                    this.state.finishings[finishingId] = defaultQty;
-	                                }
-	                            }
+                                const defaultQty = Number(f?.default_qty ?? (f?.is_required ? (f?.min_qty ?? 1) : 0));
+                                if (Number.isFinite(defaultQty) && defaultQty > 0) {
+                                    this.state.finishings[finishingId] = defaultQty;
+                                }
+                            }
 
-	                            this.refreshPrice();
-	                        },
+                            this.refreshPrice();
+                        },
 
                         setCartToast(type, message) {
-                            this.cart.toast = { type, message };
+                            this.cart.toast = {
+                                type,
+                                message
+                            };
                             window.setTimeout(() => {
                                 if (this.cart.toast.message === message) {
-                                    this.cart.toast = { type: null, message: null };
+                                    this.cart.toast = {
+                                        type: null,
+                                        message: null
+                                    };
                                 }
                             }, 6500);
                         },
@@ -730,7 +760,8 @@
 
                             const qty = Math.max(1, Number(this.state.qty || 1));
 
-                            const isDimensionBased = !!(this.product?.is_dimension_based || this.product?.requires_dimensions || this.product?.product_type === 'dimension_based');
+                            const isDimensionBased = !!(this.product?.is_dimension_based || this.product?.requires_dimensions ||
+                                this.product?.product_type === 'dimension_based');
                             if (isDimensionBased) {
                                 const w = Number(this.state.width || 0);
                                 const h = Number(this.state.height || 0);
@@ -745,11 +776,13 @@
 
                             try {
                                 const matchedVariantSetId = (() => {
-                                    const matrix = Array.isArray(this.product?.variant_matrix) ? this.product.variant_matrix : [];
+                                    const matrix = Array.isArray(this.product?.variant_matrix) ? this.product
+                                        .variant_matrix : [];
                                     const selected = this.getSelectedOptionsMap();
                                     if (!matrix.length || !Object.keys(selected).length) return null;
 
-                                    const groupIds = [...new Set(matrix.flatMap(r => Object.keys(r?.options || {}).map(x => Number(x)).filter(Boolean)))];
+                                    const groupIds = [...new Set(matrix.flatMap(r => Object.keys(r?.options || {}).map(
+                                        x => Number(x)).filter(Boolean)))];
                                     if (!groupIds.length) return null;
 
                                     const isComplete = groupIds.every(gid => selected[gid]);
@@ -863,53 +896,53 @@
                             }
                         },
 
-	                        formatBytes(bytes) {
-	                            if (!bytes && bytes !== 0) return '';
-	                            const sizes = ['B', 'KB', 'MB', 'GB'];
-	                            const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
-	                            const val = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2);
-	                            return `${val} ${sizes[i]}`;
-	                        },
+                        formatBytes(bytes) {
+                            if (!bytes && bytes !== 0) return '';
+                            const sizes = ['B', 'KB', 'MB', 'GB'];
+                            const i = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), sizes.length - 1);
+                            const val = (bytes / Math.pow(1024, i)).toFixed(i === 0 ? 0 : 2);
+                            return `${val} ${sizes[i]}`;
+                        },
 
-	                        clearArtworkFile() {
-	                            this.state.artwork.file = null;
-	                            this.state.artwork.file_name = '';
-	                            this.state.artwork.file_size = 0;
-	                            this.state.artwork.file_size_label = '';
-	                            this.state.artwork.too_large = false;
-	                        },
+                        clearArtworkFile() {
+                            this.state.artwork.file = null;
+                            this.state.artwork.file_name = '';
+                            this.state.artwork.file_size = 0;
+                            this.state.artwork.file_size_label = '';
+                            this.state.artwork.too_large = false;
+                        },
 
-	                        handleArtworkUpload(e) {
-	                            const file = e?.target?.files?.[0];
-	                            if (!file) return;
+                        handleArtworkUpload(e) {
+                            const file = e?.target?.files?.[0];
+                            if (!file) return;
 
-	                            const maxBytes = 104857600; // 100MB
+                            const maxBytes = 104857600; // 100MB
 
-	                            this.state.artwork.file_name = file.name;
-	                            this.state.artwork.file_size = file.size;
-	                            this.state.artwork.file_size_label = this.formatBytes(file.size);
+                            this.state.artwork.file_name = file.name;
+                            this.state.artwork.file_size = file.size;
+                            this.state.artwork.file_size_label = this.formatBytes(file.size);
 
-	                            if (file.size > maxBytes) {
-	                                this.state.artwork.too_large = true;
-	                                this.state.artwork.file = null;
-	                                e.target.value = '';
-	                                return;
-	                            }
+                            if (file.size > maxBytes) {
+                                this.state.artwork.too_large = true;
+                                this.state.artwork.file = null;
+                                e.target.value = '';
+                                return;
+                            }
 
-	                            this.state.artwork.too_large = false;
+                            this.state.artwork.too_large = false;
 
-	                            const allowedExt = ['pdf', 'ai', 'psd', 'png', 'jpg', 'jpeg'];
-	                            const ext = (file.name.split('.').pop() || '').toLowerCase();
-	                            if (!allowedExt.includes(ext)) {
-	                                this.state.artwork.file = null;
-	                                e.target.value = '';
-	                                alert('Invalid file type. Allowed: PDF, AI, PSD, JPG, PNG.');
-	                                return;
-	                            }
+                            const allowedExt = ['pdf', 'ai', 'psd', 'png', 'jpg', 'jpeg'];
+                            const ext = (file.name.split('.').pop() || '').toLowerCase();
+                            if (!allowedExt.includes(ext)) {
+                                this.state.artwork.file = null;
+                                e.target.value = '';
+                                alert('Invalid file type. Allowed: PDF, AI, PSD, JPG, PNG.');
+                                return;
+                            }
 
-	                            this.state.artwork.file = file;
-	                            this.refreshPrice();
-	                        },
+                            this.state.artwork.file = file;
+                            this.refreshPrice();
+                        },
 
                         getSelectedOptionsMap() {
                             const map = {};
@@ -937,13 +970,14 @@
 
                             const validRows = matrix.filter(row => {
                                 const rowMap = row.options || row;
-                                return beforeGroupIds.every(gidBefore => Number(rowMap[gidBefore]) === Number(selected[gidBefore]));
+                                return beforeGroupIds.every(gidBefore => Number(rowMap[gidBefore]) === Number(selected[
+                                    gidBefore]));
                             });
 
                             const validOptionIds = new Set(
                                 validRows
-                                    .map(row => Number((row.options || row)[gid]))
-                                    .filter(v => Number.isFinite(v))
+                                .map(row => Number((row.options || row)[gid]))
+                                .filter(v => Number.isFinite(v))
                             );
 
                             // If matrix doesn't cover this group, fall back to all options
@@ -1004,14 +1038,14 @@
 
                             const canAbort = typeof AbortController !== 'undefined';
                             if (canAbort) {
-	                                if (this._priceAbortController) {
-	                                    try {
-	                                        this._priceAbortController.abort();
-	                                    } catch (e) {}
-	                                }
-	                                this._priceAbortController = new AbortController();
-	                            } else {
-	                                this._priceAbortController = null;
+                                if (this._priceAbortController) {
+                                    try {
+                                        this._priceAbortController.abort();
+                                    } catch (e) {}
+                                }
+                                this._priceAbortController = new AbortController();
+                            } else {
+                                this._priceAbortController = null;
                             }
 
                             this.loading.price = true;
@@ -1033,17 +1067,17 @@
                                 },
                             };
 
-	                            try {
-	                                const res = await fetch(this.pricingQuoteUrl, {
-	                                    method: 'POST',
-	                                    ...(canAbort && this._priceAbortController ? {
-	                                        signal: this._priceAbortController.signal
-	                                    } : {}),
-	                                    headers: {
-	                                        'Accept': 'application/json',
-	                                        'Content-Type': 'application/json',
-	                                        'X-Requested-With': 'XMLHttpRequest',
-	                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
+                            try {
+                                const res = await fetch(this.pricingQuoteUrl, {
+                                    method: 'POST',
+                                    ...(canAbort && this._priceAbortController ? {
+                                        signal: this._priceAbortController.signal
+                                    } : {}),
+                                    headers: {
+                                        'Accept': 'application/json',
+                                        'Content-Type': 'application/json',
+                                        'X-Requested-With': 'XMLHttpRequest',
+                                        'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]')
                                             ?.getAttribute('content'),
                                     },
                                     body: JSON.stringify(payload),
@@ -1080,9 +1114,9 @@
                                 }
                             }
                         },
-	                    }
-	                }
-	            </script>
+                    }
+                }
+            </script>
         @endpush
     </div>
 </x-home-layout>
