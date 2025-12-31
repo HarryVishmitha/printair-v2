@@ -26,6 +26,15 @@ $metaImage = Str::startsWith($imagePath, ['http://', 'https://'])
 : $baseUrl . $imagePath;
 
 $robots = $noindex ? 'noindex, nofollow' : 'index, follow';
+// Optional: guess image type
+$imgExt = strtolower(pathinfo(parse_url($metaImage, PHP_URL_PATH) ?? '', PATHINFO_EXTENSION));
+$ogType = match ($imgExt) {
+    'png' => 'image/png',
+    'webp' => 'image/webp',
+    default => 'image/jpeg',
+};
+$ogW = 1200;
+$ogH = 630;
 @endphp
 
 <title>{{ $metaTitle }}</title>
@@ -46,7 +55,10 @@ $robots = $noindex ? 'noindex, nofollow' : 'index, follow';
 {{-- Open Graph --}}
 <meta property="og:title" content="{{ $metaTitle }}">
 <meta property="og:description" content="{{ $metaDescription }}">
-<meta property="og:image" content="{{ $metaImage }}">
+<meta property="og:image:secure_url" content="{{ $metaImage }}">
+<meta property="og:image:type" content="{{ $ogType }}">
+<meta property="og:image:width" content="{{ $ogW }}">
+<meta property="og:image:height" content="{{ $ogH }}">
 <meta property="og:url" content="{{ $fullUrl }}">
 <meta property="og:type" content="{{ $type }}">
 <meta property="og:site_name" content="{{ $siteName }}">

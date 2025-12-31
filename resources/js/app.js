@@ -6,6 +6,7 @@ import { homePopularProducts } from './home/popular-products';
 import { homePopularProductsV2 } from './home/popular-products-v2';
 import { printairFooterHub } from './home/footer-hub';
 import { typingText } from './ui/typingText';
+import { smartHeader } from './ui/smartHeader';
 
 import Alpine from 'alpinejs';
 
@@ -15,5 +16,6 @@ window.homePopularProducts = homePopularProducts;
 window.homePopularProductsV2 = homePopularProductsV2;
 window.printairFooterHub = printairFooterHub;
 window.typingText = typingText;
+window.smartHeader = smartHeader;
 
 Alpine.start();
