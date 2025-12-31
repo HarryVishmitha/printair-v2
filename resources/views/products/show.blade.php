@@ -1117,6 +1117,37 @@
                     }
                 }
             </script>
+            <script>
+                (function() {
+                    // Avoid double-binding if the layout is re-rendered
+                    if (window.__printairAccordionBound) return;
+                    window.__printairAccordionBound = true;
+
+                    document.addEventListener('click', function(e) {
+                        const btn = e.target.closest('[data-acc-btn]');
+                        if (!btn) return;
+
+                        const acc = btn.closest('[data-accordion]');
+                        if (!acc) return;
+
+                        const panel = btn.nextElementSibling;
+                        if (!panel || !panel.matches('[data-acc-panel]')) return;
+
+                        const isOpen = !panel.classList.contains('hidden');
+
+                        // Close all panels in this accordion only
+                        acc.querySelectorAll('[data-acc-panel]').forEach(p => p.classList.add('hidden'));
+                        acc.querySelectorAll('[data-acc-icon]').forEach(i => i.textContent = '+');
+
+                        // Toggle current
+                        if (!isOpen) {
+                            panel.classList.remove('hidden');
+                            const icon = btn.querySelector('[data-acc-icon]');
+                            if (icon) icon.textContent = '–';
+                        }
+                    });
+                })();
+            </script>
         @endpush
     </div>
 </x-home-layout>
