@@ -77,7 +77,7 @@ export function smartHeader(options = {}) {
             if (!headerEl || !spacerEl) return;
 
             const height = Math.ceil(headerEl.getBoundingClientRect().height);
-            spacerEl.style.height = `${height - 90 }px`;
+            spacerEl.style.height = `${height - 75 }px`;
             document.documentElement.style.setProperty('--printair-header-height', `${height}px`);
         },
     };
