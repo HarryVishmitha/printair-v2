@@ -581,7 +581,7 @@
         </div>
     </div>
 
-    <div x-ref="spacer" class="h-[148px] md:h-[168px]" style="height: var(--printair-header-height, 168px)"
+    <div x-ref="spacer" class="h-[150px] md:h-[168px]" style="height: var(--printair-header-height, 168px)"
         aria-hidden="true"></div>
 
     {{-- 🔹 OFFCANVAS SIDEBAR (Mobile only) --}}
