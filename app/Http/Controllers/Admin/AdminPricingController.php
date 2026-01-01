@@ -760,7 +760,7 @@ class AdminPricingController extends Controller
         $data = $request->validate([
             'product_pricing_id' => ['required', 'integer', 'exists:product_pricings,id'],
             'tiers' => ['array'],
-            'tiers.*.id' => ['nullable', 'integer'],
+            'tiers.*.id' => ['nullable', 'integer', 'exists:product_price_tiers,id'],
             'tiers.*.min_qty' => ['required', 'integer', 'min:1'],
             'tiers.*.max_qty' => ['nullable', 'integer', 'min:1'],
             'tiers.*.price' => ['required', 'numeric', 'min:0'],
@@ -776,6 +776,8 @@ class AdminPricingController extends Controller
                     ->firstOrFail();
 
                 $this->authorize('update', $pricing);
+
+                $keptTierIds = [];
 
                 foreach (($data['tiers'] ?? []) as $t) {
                     $tierId = (int) ($t['id'] ?? 0);
@@ -794,14 +796,20 @@ class AdminPricingController extends Controller
                     ];
 
                     if ($tierId) {
-                        ProductPriceTier::query()
+                        $updated = ProductPriceTier::query()
                             ->whereKey($tierId)
                             ->where('product_pricing_id', $pricing->id)
                             ->whereNull('deleted_at')
                             ->lockForUpdate()
                             ->update($payload);
+
+                        if (! $updated) {
+                            throw new \RuntimeException('Tier not found for this pricing row.');
+                        }
+
+                        $keptTierIds[] = $tierId;
                     } else {
-                        ProductPriceTier::create([
+                        $new = ProductPriceTier::create([
                             'product_pricing_id' => $pricing->id,
                             'min_qty' => $payload['min_qty'],
                             'max_qty' => $payload['max_qty'],
@@ -809,7 +817,23 @@ class AdminPricingController extends Controller
                             'created_by' => Auth::user()?->id,
                             'updated_by' => Auth::user()?->id,
                         ]);
+
+                        $keptTierIds[] = (int) $new->id;
                     }
+                }
+
+                $keptTierIds = array_values(array_unique(array_filter($keptTierIds, fn ($id) => (int) $id > 0)));
+
+                $tiersToDelete = ProductPriceTier::query()
+                    ->where('product_pricing_id', $pricing->id)
+                    ->whereNull('deleted_at')
+                    ->when(! empty($keptTierIds), fn ($q) => $q->whereNotIn('id', $keptTierIds))
+                    ->lockForUpdate()
+                    ->get();
+
+                foreach ($tiersToDelete as $tier) {
+                    $tier->update(['updated_by' => Auth::user()?->id]);
+                    $tier->delete();
                 }
             });
 
