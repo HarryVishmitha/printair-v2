@@ -3,6 +3,7 @@
 namespace App\Http\Controllers;
 
 use App\Models\Product;
+use App\Models\WorkingGroup;
 use App\Services\ActivityLogger;
 use App\Services\Pricing\DimensionCalculatorService;
 use App\Services\Pricing\PricingResolverService;
@@ -93,7 +94,7 @@ class HomeController extends Controller
     public function popularProducts(Request $request, PricingResolverService $pricing)
     {
         $user = Auth::user();
-        $wgId = $user?->working_group_id ?? null;
+        $wgId = $user?->working_group_id ?? WorkingGroup::getPublicId();
 
         $limit = max(1, min(12, (int) $request->integer('limit', 6)));
 
@@ -300,7 +301,7 @@ class HomeController extends Controller
     public function productsJson(Request $request, PricingResolverService $pricing)
     {
         $user = Auth::user();
-        $wgId = $user?->working_group_id ?? null;
+        $wgId = $user?->working_group_id ?? WorkingGroup::getPublicId();
 
         $productsVersion = Product::query()
             ->active()
@@ -442,7 +443,7 @@ class HomeController extends Controller
     public function servicesJson(Request $request, PricingResolverService $pricing)
     {
         $user = Auth::user();
-        $wgId = $user?->working_group_id ?? null;
+        $wgId = $user?->working_group_id ?? WorkingGroup::getPublicId();
 
         $servicesVersion = Product::query()
             ->active()
@@ -620,7 +621,7 @@ class HomeController extends Controller
             }
         }
 
-        $wgId = Auth::user()?->working_group_id ?? null;
+        $wgId = Auth::user()?->working_group_id ?? WorkingGroup::getPublicId();
         $currency = 'LKR';
         $startingPrice = null;
         $startingLabel = null;
@@ -870,7 +871,7 @@ class HomeController extends Controller
         $qty = (int) ($validated['qty'] ?? 1);
         $qty = max(1, min(100000, $qty));
 
-        $wgId = Auth::user()?->working_group_id ?? null;
+        $wgId = Auth::user()?->working_group_id ?? WorkingGroup::getPublicId();
         $rp = $pricing->resolve($product, $wgId);
 
         if (! $rp) {

@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Public;
 
 use App\Http\Controllers\Controller;
+use App\Models\WorkingGroup;
 use App\Services\Checkout\GuestOtpService;
 use App\Services\Cart\CartService;
 use Illuminate\Http\Request;
@@ -101,9 +102,16 @@ class CheckoutController extends Controller
 
         $data['meta'] = $data['meta'] ?? [];
 
+        $publicWgId = WorkingGroup::getPublicId() ?: 1;
+        $effectiveWgId = $publicWgId;
+
+        if (Auth::check()) {
+            $effectiveWgId = Auth::user()?->working_group_id ?: $publicWgId;
+        }
+
         $order = $this->place->placeDraft([
             ...$data,
-            'working_group_id' => $data['working_group_id'] ?? (\App\Models\WorkingGroup::getPublicId() ?: 1),
+            'working_group_id' => $effectiveWgId,
         ]);
 
         return response()->json([

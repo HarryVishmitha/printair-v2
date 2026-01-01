@@ -21,27 +21,34 @@ class PricingResolverService
     public function resolve(Product $product, WorkingGroup|int|null $workingGroup = null): ?ResolvedPricing
     {
         try {
-            $wgId = $workingGroup instanceof WorkingGroup
+            $requestedWgId = $workingGroup instanceof WorkingGroup
                 ? $workingGroup->id
                 : (is_int($workingGroup) ? $workingGroup : null);
 
+            $requestedWgId = ($requestedWgId && $requestedWgId > 0) ? $requestedWgId : null;
+
+            $publicWgId = null;
+            $effectiveWgId = $requestedWgId;
+            if ($effectiveWgId === null) {
+                $publicWgId = WorkingGroup::getPublicId();
+                $effectiveWgId = $publicWgId;
+            }
+
             $public = ProductPricing::query()
                 ->where('product_id', $product->id)
-                ->where('context', 'public')
-                ->whereNull('working_group_id')
+                ->public()
                 ->active()
-                ->with(['tiers', 'variantPricings', 'finishingPricings', 'rollPricings.roll'])
+                ->with($this->pricingRelations())
                 ->first();
 
             $wgPricing = null;
 
-            if ($wgId) {
+            if ($effectiveWgId) {
                 $wgPricing = ProductPricing::query()
                     ->where('product_id', $product->id)
-                    ->where('context', 'working_group')
-                    ->where('working_group_id', $wgId)
+                    ->forWorkingGroup($effectiveWgId)
                     ->active()
-                    ->with(['tiers', 'variantPricings', 'finishingPricings', 'rollPricings.roll'])
+                    ->with($this->pricingRelations())
                     ->first();
             }
 
@@ -61,7 +68,9 @@ class PricingResolverService
                 usingWorkingGroupOverride: (bool) $wgPricing,
                 meta: [
                     'product_id' => $product->id,
-                    'working_group_id' => $wgId,
+                    'requested_working_group_id' => $requestedWgId,
+                    'public_working_group_id' => $publicWgId,
+                    'effective_working_group_id' => $effectiveWgId,
                 ]
             );
         } catch (\Throwable $e) {
@@ -146,6 +155,8 @@ class PricingResolverService
                 return null;
             }
 
+            $source->loadMissing('variantPricings');
+
             return $source->variantPricings
                 ->firstWhere('variant_set_id', $variantSetId);
         } catch (\Throwable $e) {
@@ -169,6 +180,8 @@ class PricingResolverService
             if (! $source) {
                 return null;
             }
+
+            $source->loadMissing('finishingPricings');
 
             return $source->finishingPricings
                 ->firstWhere('finishing_product_id', $finishingProductId);
@@ -205,6 +218,8 @@ class PricingResolverService
             if (! $base) {
                 return $baseRates;
             }
+
+            $base->loadMissing('rollPricings.roll');
 
             // Only look for roll overrides inside the SAME pricing source context we chose for base.
             // That keeps "ProductPricing first" and makes roll pricing optional extension.
@@ -250,10 +265,11 @@ class PricingResolverService
     public function rollOverrideRow(ResolvedPricing $rp, int $rollId)
     {
         $base = $this->pickBaseSource($rp);
-        if (! $base || ! $base->relationLoaded('rollPricings')) {
+        if (! $base) {
             return null;
         }
 
+        $base->loadMissing('rollPricings');
         $row = $base->rollPricings->firstWhere('roll_id', $rollId);
 
         return ($row && $row->is_active) ? $row : null;
@@ -295,6 +311,7 @@ class PricingResolverService
     private function tierPriceForQty(ProductPricing $pricing, int $qty): ?string
     {
         // tiers() relation is ordered in model, but we safely handle anyway
+        $pricing->loadMissing('tiers');
         $tiers = $pricing->tiers;
 
         if (! $tiers || $tiers->isEmpty()) {
@@ -316,5 +333,10 @@ class PricingResolverService
         });
 
         return $tier?->price !== null ? (string) $tier->price : null;
+    }
+
+    private function pricingRelations(): array
+    {
+        return ['tiers', 'variantPricings', 'finishingPricings', 'rollPricings.roll'];
     }
 }
