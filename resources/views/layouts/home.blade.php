@@ -1146,7 +1146,7 @@
             window.gapi.load('ratingbadge', function() {
                 window.gapi.ratingbadge.render(container, {
                     merchant_id: 5548164916,
-                    position: 'BOTTOM_RIGHT'
+                    position: 'BOTTOM_LEFT'
                 });
             });
         };
