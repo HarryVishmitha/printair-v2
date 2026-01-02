@@ -18,23 +18,55 @@ class GmcFeedController extends Controller
 
     public function products(Request $request): Response
     {
-        $lastmod = $this->feed->lastModified();
-
         $cache = $this->cache();
         $cacheKey = 'gmc:products:v1';
-        $cacheTtl = 3600;
-        $version = implode('|', [
-            $lastmod?->toAtomString() ?? '',
-            (string) config('app.url'),
-        ]);
-
         $payload = $cache->get($cacheKey);
+
+        $lastmod = null;
+        $version = null;
+
+        try {
+            $lastmod = $this->feed->lastModified();
+            $version = implode('|', [
+                $lastmod?->toAtomString() ?? '',
+                (string) config('app.url'),
+            ]);
+        } catch (\Throwable $e) {
+            if (is_array($payload) && is_string($payload['xml'] ?? null)) {
+                return $this->xmlResponse($request, $payload['xml'], null);
+            }
+
+            if ((bool) config('app.debug')) {
+                throw $e;
+            }
+
+            return response('Feed temporarily unavailable.', 503)
+                ->header('Content-Type', 'text/plain; charset=UTF-8')
+                ->header('Retry-After', '300');
+        }
+
         if (is_array($payload) && ($payload['version'] ?? null) === $version && is_string($payload['xml'] ?? null)) {
             return $this->xmlResponse($request, $payload['xml'], $lastmod);
         }
 
-        $xml = $this->feed->buildXml();
+        try {
+            $xml = $this->feed->buildXml();
+        } catch (\Throwable $e) {
+            if (is_array($payload) && is_string($payload['xml'] ?? null)) {
+                return $this->xmlResponse($request, $payload['xml'], $lastmod);
+            }
 
+            if ((bool) config('app.debug')) {
+                throw $e;
+            }
+
+            return response('Feed temporarily unavailable.', 503)
+                ->header('Content-Type', 'text/plain; charset=UTF-8')
+                ->header('Retry-After', '300');
+        }
+
+        $hasItems = str_contains($xml, '<item>');
+        $cacheTtl = $hasItems ? 3600 : 60;
         $cache->put($cacheKey, ['version' => $version, 'xml' => $xml], $cacheTtl);
 
         return $this->xmlResponse($request, $xml, $lastmod);

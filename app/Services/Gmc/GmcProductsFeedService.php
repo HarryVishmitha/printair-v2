@@ -14,6 +14,7 @@ use App\Services\Pricing\PricingResolverService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Support\Str;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
 use XMLWriter;
 
@@ -140,8 +141,9 @@ class GmcProductsFeedService
             }
 
             return $max;
-        } catch (\Throwable) {
-            return null;
+        } catch (\Throwable $e) {
+            $this->safeLogError('GmcProductsFeedService@lastModified error', $e);
+            throw $e;
         }
     }
 
@@ -313,8 +315,9 @@ class GmcProductsFeedService
             $writer->endDocument();
 
             return $writer->outputMemory();
-        } catch (\Throwable) {
-            return $this->emptyFeedXml();
+        } catch (\Throwable $e) {
+            $this->safeLogError('GmcProductsFeedService@buildXml error', $e);
+            throw $e;
         }
     }
 
@@ -540,6 +543,20 @@ class GmcProductsFeedService
             return CarbonImmutable::parse($value);
         } catch (\Throwable) {
             return null;
+        }
+    }
+
+    private function safeLogError(string $message, \Throwable $e): void
+    {
+        $logDir = storage_path('logs');
+        if (! is_dir($logDir) || ! is_writable($logDir)) {
+            return;
+        }
+
+        try {
+            Log::error($message, ['error' => $e->getMessage()]);
+        } catch (\Throwable) {
+            // ignore logging failures (e.g. local env permissions)
         }
     }
 }
