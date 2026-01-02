@@ -13,17 +13,16 @@ use App\Models\WorkingGroup;
 use App\Services\Pricing\PricingResolverService;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
-use Illuminate\Support\Str;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use XMLWriter;
 
 class GmcProductsFeedService
 {
     public function __construct(
         private readonly PricingResolverService $pricing,
-    ) {
-    }
+    ) {}
 
     public function lastModified(): ?CarbonImmutable
     {
@@ -143,6 +142,7 @@ class GmcProductsFeedService
             return $max;
         } catch (\Throwable $e) {
             $this->safeLogError('GmcProductsFeedService@lastModified error', $e);
+
             return null;
         }
     }
@@ -150,6 +150,7 @@ class GmcProductsFeedService
     public function buildXml(): string
     {
         try {
+            // dd(__FILE__, __LINE__);
             $publicWgId = WorkingGroup::getPublicId();
 
             $query = Product::query()
@@ -184,21 +185,18 @@ class GmcProductsFeedService
                 'images:id,product_id,path,is_featured,sort_index',
                 'publicPricing.tiers',
                 'publicPricing.variantPricings',
-                'pricings' => function (Builder $pq) use ($publicWgId) {
+                'pricings' => function ($pq) use ($publicWgId) {
                     $pq->active()
-                        ->where(function (Builder $qq) use ($publicWgId) {
-                            $qq->where(function (Builder $p) {
-                                $p->where('context', 'public')->whereNull('working_group_id');
-                            });
+                        ->where(function ($qq) use ($publicWgId) {
+                            $qq->where(fn ($p) => $p->where('context', 'public')->whereNull('working_group_id'));
 
                             if ($publicWgId) {
-                                $qq->orWhere(function (Builder $wg) use ($publicWgId) {
-                                    $wg->where('context', 'working_group')->where('working_group_id', $publicWgId);
-                                });
+                                $qq->orWhere(fn ($wg) => $wg->where('context', 'working_group')->where('working_group_id', $publicWgId));
                             }
                         })
                         ->with(['tiers', 'variantPricings']);
                 },
+
                 'activeVariantSets:id,product_id,code,is_active,updated_at',
                 'activeVariantSets.items.option:id,option_group_id,label',
                 'activeVariantSets.items.option.group:id,name',
@@ -316,6 +314,7 @@ class GmcProductsFeedService
             return $writer->outputMemory();
         } catch (\Throwable $e) {
             $this->safeLogError('GmcProductsFeedService@buildXml error', $e);
+
             return $this->emptyFeedXml();
         }
     }
@@ -519,7 +518,7 @@ class GmcProductsFeedService
 
     private function startFeedWriter(): XMLWriter
     {
-        $writer = new XMLWriter();
+        $writer = new XMLWriter;
         $writer->openMemory();
         $writer->startDocument('1.0', 'UTF-8');
         $writer->setIndent(true);
@@ -598,5 +597,32 @@ class GmcProductsFeedService
         }
 
         return $value;
+    }
+
+    public function version(): string
+    {
+        $path = __FILE__;
+        $mtime = @filemtime($path);
+        $sha = @sha1_file($path);
+
+        return implode(':', [
+            'mtime='.($mtime ? (string) $mtime : '0'),
+            'sha='.($sha ? substr($sha, 0, 12) : 'none'),
+        ]);
+    }
+
+    /**
+     * Debug helper to detect whether the deployed file still contains the old Builder type-hint
+     * for the `with(['pricings' => function (...) { ... }])` relation constraint.
+     */
+    public function hasLegacyPricingsWithBuilderHint(): bool
+    {
+        $contents = @file_get_contents(__FILE__);
+        if (! is_string($contents) || $contents === '') {
+            return false;
+        }
+
+        return str_contains($contents, "'pricings' => function (Builder $pq)")
+            || str_contains($contents, "'pricings' => function(Builder $pq)");
     }
 }
