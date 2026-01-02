@@ -66,6 +66,22 @@
         })(window, document, 'script', 'dataLayer', 'GTM-NJH5B6GV');
     </script>
     <!-- End Google Tag Manager -->
+    <script src="https://apis.google.com/js/platform.js?onload=renderBadge" async defer></script>
+
+    <script>
+        window.renderBadge = function() {
+            const container = document.createElement('div');
+            container.style.marginBottom = '90px'; // 👈 push above cookie banner
+            document.body.appendChild(container);
+
+            window.gapi.load('ratingbadge', function() {
+                window.gapi.ratingbadge.render(container, {
+                    merchant_id: 5548164916,
+                    position: 'RIGHT_BOTTOM'
+                });
+            });
+        };
+    </script>
 </head>
 
 <body class="antialiased bg-gray-50 text-gray-900 font-sans" x-data="{
@@ -1135,22 +1151,7 @@
 
     @stack('scripts')
 
-    <script src="https://apis.google.com/js/platform.js?onload=renderBadge" async defer></script>
 
-    <script>
-        window.renderBadge = function() {
-            const container = document.createElement('div');
-            container.style.marginBottom = '90px'; // 👈 push above cookie banner
-            document.body.appendChild(container);
-
-            window.gapi.load('ratingbadge', function() {
-                window.gapi.ratingbadge.render(container, {
-                    merchant_id: 5548164916,
-                    position: 'RIGHT_BOTTOM'
-                });
-            });
-        };
-    </script>
 
 
 
