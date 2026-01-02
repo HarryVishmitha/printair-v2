@@ -143,7 +143,7 @@ class GmcProductsFeedService
             return $max;
         } catch (\Throwable $e) {
             $this->safeLogError('GmcProductsFeedService@lastModified error', $e);
-            throw $e;
+            return null;
         }
     }
 
@@ -181,7 +181,7 @@ class GmcProductsFeedService
             }
 
             $query->with([
-                'primaryImage:id,product_id,path',
+                'images:id,product_id,path,is_featured,sort_index',
                 'publicPricing.tiers',
                 'publicPricing.variantPricings',
                 'pricings' => function (Builder $pq) use ($publicWgId) {
@@ -207,106 +207,105 @@ class GmcProductsFeedService
             $writer = $this->startFeedWriter();
 
             foreach ($query->lazyById(200) as $product) {
-                $publicPricing = $product->publicPricing instanceof ProductPricing ? $product->publicPricing : null;
+                try {
+                    $publicPricing = $product->publicPricing instanceof ProductPricing ? $product->publicPricing : null;
 
-                $wgPricing = null;
-                if ($publicWgId && $product->relationLoaded('pricings')) {
-                    $wgPricing = $product->pricings
-                        ->first(fn (ProductPricing $p) => $p->context === 'working_group' && (int) $p->working_group_id === (int) $publicWgId);
-                }
+                    $wgPricing = null;
+                    if ($publicWgId && $product->relationLoaded('pricings')) {
+                        $wgPricing = $product->pricings
+                            ->first(fn (ProductPricing $p) => $p->context === 'working_group' && (int) $p->working_group_id === (int) $publicWgId);
+                    }
 
-                $effective = $wgPricing ?: $publicPricing;
-                if (! $effective instanceof ProductPricing) {
-                    continue;
-                }
-
-                $rp = new ResolvedPricing(
-                    effectivePricing: $effective,
-                    publicPricing: $publicPricing,
-                    workingGroupPricing: $wgPricing,
-                    usingWorkingGroupOverride: (bool) $wgPricing,
-                    meta: ['product_id' => $product->id],
-                );
-
-                if ($product->product_type === 'dimension_based') {
-                    $unit = $this->priceForDimensionBasedProduct($rp);
-                    if ($unit === null) {
+                    $effective = $wgPricing ?: $publicPricing;
+                    if (! $effective instanceof ProductPricing) {
                         continue;
                     }
 
-                    $this->writeItem(
-                        $writer,
-                        id: (string) $product->product_code,
-                        title: (string) $product->name,
-                        description: $this->descriptionFor($product->description, $product->short_description, $product->name),
-                        link: route('products.show', ['product' => $product->slug], absolute: true),
-                        imageLink: $this->publicAssetUrl($product->primaryImage?->path),
-                        availabilityDate: $this->availabilityDateForProduct($product),
-                        priceLkr: $unit,
-                        mpn: (string) $product->product_code,
-                        itemGroupId: null,
+                    $rp = new ResolvedPricing(
+                        effectivePricing: $effective,
+                        publicPricing: $publicPricing,
+                        workingGroupPricing: $wgPricing,
+                        usingWorkingGroupOverride: (bool) $wgPricing,
+                        meta: ['product_id' => $product->id],
                     );
 
-                    continue;
-                }
+                    if ($product->product_type === 'dimension_based') {
+                        $unit = $this->priceForDimensionBasedProduct($rp);
+                        if ($unit === null) {
+                            continue;
+                        }
 
-                $base = $this->priceForStandardProduct($product, $rp);
-                $variantSets = $product->activeVariantSets;
+                        $this->writeItem(
+                            $writer,
+                            id: (string) $product->product_code,
+                            title: (string) $product->name,
+                            description: $this->descriptionFor($product->description, $product->short_description, $product->name),
+                            link: route('products.show', ['product' => $product->slug], absolute: true),
+                            imageLink: $this->imageLinkForProduct($product),
+                            availabilityDate: $this->availabilityDateForProduct($product),
+                            priceLkr: $unit,
+                            mpn: (string) $product->product_code,
+                            itemGroupId: null,
+                        );
 
-                if (! $variantSets || $variantSets->isEmpty()) {
-                    if ($base === null) {
                         continue;
                     }
 
-                    $this->writeItem(
-                        $writer,
-                        id: (string) $product->product_code,
-                        title: (string) $product->name,
-                        description: $this->descriptionFor($product->description, $product->short_description, $product->name),
-                        link: route('products.show', ['product' => $product->slug], absolute: true),
-                        imageLink: $this->publicAssetUrl($product->primaryImage?->path),
-                        availabilityDate: $this->availabilityDateForProduct($product),
-                        priceLkr: $base,
-                        mpn: (string) $product->product_code,
-                        itemGroupId: null,
-                    );
+                    $base = $this->priceForStandardProduct($product, $rp);
+                    $variantSets = $product->activeVariantSets;
 
-                    continue;
-                }
+                    if (! $variantSets || $variantSets->isEmpty()) {
+                        if ($base === null) {
+                            continue;
+                        }
 
-                foreach ($variantSets as $set) {
-                    $variantLabel = $this->variantLabelForSet($set);
-                    $vp = $this->pricing->variantPricing($rp, (int) $set->id);
+                        $this->writeItem(
+                            $writer,
+                            id: (string) $product->product_code,
+                            title: (string) $product->name,
+                            description: $this->descriptionFor($product->description, $product->short_description, $product->name),
+                            link: route('products.show', ['product' => $product->slug], absolute: true),
+                            imageLink: $this->imageLinkForProduct($product),
+                            availabilityDate: $this->availabilityDateForProduct($product),
+                            priceLkr: $base,
+                            mpn: (string) $product->product_code,
+                            itemGroupId: null,
+                        );
 
-                    $variantUnit = null;
+                        continue;
+                    }
 
-                    if ($base !== null) {
+                    foreach ($variantSets as $set) {
+                        $variantLabel = $this->variantLabelForSet($set);
+                        $vp = $this->pricing->variantPricing($rp, (int) $set->id);
+
                         $variantUnit = $base;
+                        if ($vp && $vp->fixed_price !== null) {
+                            $variantUnit = (string) ((float) ($base ?? 0.0) + (float) $vp->fixed_price);
+                        }
+
+                        if ($variantUnit === null) {
+                            continue;
+                        }
+
+                        $title = $product->name.($variantLabel !== '' ? (' - '.$variantLabel) : '');
+                        $itemId = $product->product_code.':v'.$set->id;
+
+                        $this->writeItem(
+                            $writer,
+                            id: $itemId,
+                            title: $title,
+                            description: $this->descriptionFor($product->description, $product->short_description, $product->name),
+                            link: route('products.show', ['product' => $product->slug], absolute: true),
+                            imageLink: $this->imageLinkForProduct($product),
+                            availabilityDate: $this->availabilityDateForProduct($product),
+                            priceLkr: $variantUnit,
+                            mpn: $itemId,
+                            itemGroupId: (string) $product->product_code,
+                        );
                     }
-
-                    if ($vp && $vp->fixed_price !== null) {
-                        $variantUnit = (string) ((float) ($variantUnit ?? 0.0) + (float) $vp->fixed_price);
-                    }
-
-                    if ($variantUnit === null) {
-                        continue;
-                    }
-
-                    $title = $product->name.($variantLabel !== '' ? (' - '.$variantLabel) : '');
-                    $itemId = $product->product_code.':v'.$set->id;
-
-                    $this->writeItem(
-                        $writer,
-                        id: $itemId,
-                        title: $title,
-                        description: $this->descriptionFor($product->description, $product->short_description, $product->name),
-                        link: route('products.show', ['product' => $product->slug], absolute: true),
-                        imageLink: $this->publicAssetUrl($product->primaryImage?->path),
-                        availabilityDate: $this->availabilityDateForProduct($product),
-                        priceLkr: $variantUnit,
-                        mpn: $itemId,
-                        itemGroupId: (string) $product->product_code,
-                    );
+                } catch (\Throwable $e) {
+                    $this->safeLogError('GmcProductsFeedService@buildXml product error', $e);
                 }
             }
 
@@ -317,7 +316,7 @@ class GmcProductsFeedService
             return $writer->outputMemory();
         } catch (\Throwable $e) {
             $this->safeLogError('GmcProductsFeedService@buildXml error', $e);
-            throw $e;
+            return $this->emptyFeedXml();
         }
     }
 
@@ -443,9 +442,15 @@ class GmcProductsFeedService
     {
         $value = $description ?? $shortDescription ?? $fallbackName;
         $value = trim(Str::of($value)->stripTags()->replace("\u{00A0}", ' ')->squish()->toString());
-        $value = $value !== '' ? mb_substr($value, 0, 5000) : '';
+        $value = $value !== '' ? $this->sanitizeXmlText($value, 5000) : '';
 
-        return $value !== '' ? $value : $fallbackName;
+        if ($value !== '') {
+            return $value;
+        }
+
+        $fallback = $this->sanitizeXmlText($fallbackName, 5000);
+
+        return $fallback !== '' ? $fallback : $fallbackName;
     }
 
     private function titleFor(string $title): string
@@ -455,7 +460,7 @@ class GmcProductsFeedService
             return '';
         }
 
-        return mb_substr($title, 0, 150);
+        return $this->sanitizeXmlText($title, 150);
     }
 
     private function availabilityDateForProduct(Product $product): string
@@ -502,6 +507,14 @@ class GmcProductsFeedService
         }
 
         return Storage::disk('public')->url($path);
+    }
+
+    private function imageLinkForProduct(Product $product): ?string
+    {
+        $images = $product->images ?? collect();
+        $primary = $images->firstWhere('is_featured', true) ?? $images->first();
+
+        return $this->publicAssetUrl($primary?->path);
     }
 
     private function startFeedWriter(): XMLWriter
@@ -558,5 +571,32 @@ class GmcProductsFeedService
         } catch (\Throwable) {
             // ignore logging failures (e.g. local env permissions)
         }
+    }
+
+    private function sanitizeXmlText(string $value, ?int $maxLen = null): string
+    {
+        $value = trim($value);
+        if ($value === '') {
+            return '';
+        }
+
+        if (function_exists('iconv')) {
+            $converted = @iconv('UTF-8', 'UTF-8//IGNORE', $value);
+            if (is_string($converted) && $converted !== '') {
+                $value = $converted;
+            }
+        }
+
+        $value = preg_replace(
+            '/[^\x{9}\x{A}\x{D}\x{20}-\x{D7FF}\x{E000}-\x{FFFD}\x{10000}-\x{10FFFF}]/u',
+            '',
+            $value
+        ) ?? '';
+
+        if ($maxLen !== null && $maxLen > 0 && mb_strlen($value) > $maxLen) {
+            $value = mb_substr($value, 0, $maxLen);
+        }
+
+        return $value;
     }
 }
