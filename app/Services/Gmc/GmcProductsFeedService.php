@@ -32,8 +32,21 @@ class GmcProductsFeedService
             $productScope = function (Builder $q) use ($publicWgId): void {
                 $q->active()
                     ->visibleToPublic()
-                    ->whereIn('product_type', ['standard', 'dimension_based'])
-                    ->whereHas('publicPricing');
+                    ->whereIn('product_type', ['standard', 'dimension_based', 'service'])
+                    ->whereHas('pricings', function (Builder $pq) use ($publicWgId) {
+                        $pq->active()
+                            ->where(function (Builder $qq) use ($publicWgId) {
+                                $qq->where(function (Builder $p) {
+                                    $p->where('context', 'public')->whereNull('working_group_id');
+                                });
+
+                                if ($publicWgId) {
+                                    $qq->orWhere(function (Builder $wg) use ($publicWgId) {
+                                        $wg->where('context', 'working_group')->where('working_group_id', $publicWgId);
+                                    });
+                                }
+                            });
+                    });
 
                 if ($publicWgId) {
                     $q->whereDoesntHave('workingGroupOverrides', function (Builder $qq) use ($publicWgId) {
@@ -54,8 +67,18 @@ class GmcProductsFeedService
             }
 
             $pricingMax = $this->parseDateMax(ProductPricing::query()
-                ->public()
                 ->active()
+                ->where(function (Builder $q) use ($publicWgId) {
+                    $q->where(function (Builder $p) {
+                        $p->where('context', 'public')->whereNull('working_group_id');
+                    });
+
+                    if ($publicWgId) {
+                        $q->orWhere(function (Builder $wg) use ($publicWgId) {
+                            $wg->where('context', 'working_group')->where('working_group_id', $publicWgId);
+                        });
+                    }
+                })
                 ->whereHas('product', $productScope)
                 ->max('updated_at'));
             if ($pricingMax) {
@@ -77,8 +100,20 @@ class GmcProductsFeedService
             }
 
             $variantPricingMax = $this->parseDateMax(ProductVariantPricing::query()
-                ->whereHas('pricing', function (Builder $q) use ($productScope) {
-                    $q->public()->active()->whereHas('product', $productScope);
+                ->whereHas('pricing', function (Builder $q) use ($productScope, $publicWgId) {
+                    $q->active()
+                        ->where(function (Builder $qq) use ($publicWgId) {
+                            $qq->where(function (Builder $p) {
+                                $p->where('context', 'public')->whereNull('working_group_id');
+                            });
+
+                            if ($publicWgId) {
+                                $qq->orWhere(function (Builder $wg) use ($publicWgId) {
+                                    $wg->where('context', 'working_group')->where('working_group_id', $publicWgId);
+                                });
+                            }
+                        })
+                        ->whereHas('product', $productScope);
                 })
                 ->max('updated_at'));
             if ($variantPricingMax) {
@@ -118,9 +153,22 @@ class GmcProductsFeedService
             $query = Product::query()
                 ->active()
                 ->visibleToPublic()
-                ->whereIn('product_type', ['standard', 'dimension_based'])
-                ->whereHas('publicPricing')
-                ->select(['id', 'product_code', 'name', 'slug', 'product_type', 'short_description', 'description', 'min_qty', 'updated_at', 'created_at']);
+                ->whereIn('product_type', ['standard', 'dimension_based', 'service'])
+                ->whereHas('pricings', function (Builder $pq) use ($publicWgId) {
+                    $pq->active()
+                        ->where(function (Builder $qq) use ($publicWgId) {
+                            $qq->where(function (Builder $p) {
+                                $p->where('context', 'public')->whereNull('working_group_id');
+                            });
+
+                            if ($publicWgId) {
+                                $qq->orWhere(function (Builder $wg) use ($publicWgId) {
+                                    $wg->where('context', 'working_group')->where('working_group_id', $publicWgId);
+                                });
+                            }
+                        });
+                })
+                ->select(['id', 'product_code', 'name', 'slug', 'product_type', 'short_description', 'description', 'min_qty', 'updated_at']);
 
             if ($publicWgId) {
                 $query->whereDoesntHave('workingGroupOverrides', function (Builder $qq) use ($publicWgId) {
@@ -132,9 +180,23 @@ class GmcProductsFeedService
 
             $query->with([
                 'primaryImage:id,product_id,path',
-                'publicPricing',
                 'publicPricing.tiers',
                 'publicPricing.variantPricings',
+                'pricings' => function (Builder $pq) use ($publicWgId) {
+                    $pq->active()
+                        ->where(function (Builder $qq) use ($publicWgId) {
+                            $qq->where(function (Builder $p) {
+                                $p->where('context', 'public')->whereNull('working_group_id');
+                            });
+
+                            if ($publicWgId) {
+                                $qq->orWhere(function (Builder $wg) use ($publicWgId) {
+                                    $wg->where('context', 'working_group')->where('working_group_id', $publicWgId);
+                                });
+                            }
+                        })
+                        ->with(['tiers', 'variantPricings']);
+                },
                 'activeVariantSets:id,product_id,code,is_active,updated_at',
                 'activeVariantSets.items.option:id,option_group_id,label',
                 'activeVariantSets.items.option.group:id,name',
@@ -143,16 +205,24 @@ class GmcProductsFeedService
             $writer = $this->startFeedWriter();
 
             foreach ($query->lazyById(200) as $product) {
-                $publicPricing = $product->publicPricing;
-                if (! $publicPricing instanceof ProductPricing) {
+                $publicPricing = $product->publicPricing instanceof ProductPricing ? $product->publicPricing : null;
+
+                $wgPricing = null;
+                if ($publicWgId && $product->relationLoaded('pricings')) {
+                    $wgPricing = $product->pricings
+                        ->first(fn (ProductPricing $p) => $p->context === 'working_group' && (int) $p->working_group_id === (int) $publicWgId);
+                }
+
+                $effective = $wgPricing ?: $publicPricing;
+                if (! $effective instanceof ProductPricing) {
                     continue;
                 }
 
                 $rp = new ResolvedPricing(
-                    effectivePricing: $publicPricing,
+                    effectivePricing: $effective,
                     publicPricing: $publicPricing,
-                    workingGroupPricing: null,
-                    usingWorkingGroupOverride: false,
+                    workingGroupPricing: $wgPricing,
+                    usingWorkingGroupOverride: (bool) $wgPricing,
                     meta: ['product_id' => $product->id],
                 );
 
@@ -250,8 +320,18 @@ class GmcProductsFeedService
 
     private function priceForStandardProduct(Product $product, ResolvedPricing $rp): ?string
     {
-        $minQty = is_numeric($product->min_qty) ? (int) $product->min_qty : 1;
-        $qty = max(1, $minQty);
+        $minQty = is_numeric($product->min_qty) ? (int) $product->min_qty : 0;
+
+        $source = $this->baseSourcePricing($rp);
+        $tierMinQty = null;
+        if ($source) {
+            $source->loadMissing('tiers');
+            if ($source->tiers && $source->tiers->isNotEmpty()) {
+                $tierMinQty = (int) $source->tiers->min('min_qty');
+            }
+        }
+
+        $qty = max(1, $minQty > 0 ? $minQty : (is_int($tierMinQty) && $tierMinQty > 0 ? $tierMinQty : 1));
 
         $unit = $this->pricing->baseUnitPrice($rp, $qty);
 
@@ -260,6 +340,15 @@ class GmcProductsFeedService
         }
 
         return $unit;
+    }
+
+    private function baseSourcePricing(ResolvedPricing $rp): ?ProductPricing
+    {
+        if ($rp->workingGroupPricing && (bool) $rp->workingGroupPricing->override_base === true) {
+            return $rp->workingGroupPricing;
+        }
+
+        return $rp->publicPricing ?: $rp->workingGroupPricing;
     }
 
     private function priceForDimensionBasedProduct(ResolvedPricing $rp): ?string
