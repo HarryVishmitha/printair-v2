@@ -6,13 +6,13 @@
 
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <link rel="canonical" href="https://example.com/page">
+    {{-- <link rel="canonical" href="https://example.com/page"> --}}
 
     <!-- branding -->
-    <link rel="icon" href="{{ asset('assets/printair/favicon.ico') }}" type="image/x-icon">
+    {{-- <link rel="icon" href="{{ asset('assets/printair/favicon.ico') }}" type="image/x-icon">
     <link rel="apple-touch-icon" href="{{ asset('assets/printair/favicon.png') }}">
     <link rel="icon" type="image/png" href="{{ asset('assets/printair/favicon.png') }}">
-    <link rel="manifest" href="{{ asset('assets/printair/site.webmanifest') }}">
+    <link rel="manifest" href="{{ asset('assets/printair/site.webmanifest') }}"> --}}
 
     <!-- SEO engines-->
     <meta name="googlebot" content="index, follow">
@@ -48,6 +48,24 @@
             display: none !important;
         }
     </style>
+    <!-- Google Tag Manager -->
+    <script>
+        (function(w, d, s, l, i) {
+            w[l] = w[l] || [];
+            w[l].push({
+                'gtm.start': new Date().getTime(),
+                event: 'gtm.js'
+            });
+            var f = d.getElementsByTagName(s)[0],
+                j = d.createElement(s),
+                dl = l != 'dataLayer' ? '&l=' + l : '';
+            j.async = true;
+            j.src =
+                'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+            f.parentNode.insertBefore(j, f);
+        })(window, document, 'script', 'dataLayer', 'GTM-NJH5B6GV');
+    </script>
+    <!-- End Google Tag Manager -->
 </head>
 
 <body class="antialiased bg-gray-50 text-gray-900 font-sans" x-data="{
@@ -107,6 +125,10 @@
     },
 }" x-init="loadCartCount()"
     @cart-updated.window="loadCartCount()" @keydown.window.escape="navMegaOpen = false; mobileNavOpen = false">
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NJH5B6GV" height="0" width="0"
+            style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
 
     <!-- Home Layout -->
     <!-- Top bar -->
@@ -1117,16 +1139,19 @@
 
     <script>
         window.renderBadge = function() {
-            var ratingBadgeContainer = document.createElement("div");
-            document.body.appendChild(ratingBadgeContainer);
+            const container = document.createElement('div');
+            container.style.marginBottom = '90px'; // 👈 push above cookie banner
+            document.body.appendChild(container);
+
             window.gapi.load('ratingbadge', function() {
-                window.gapi.ratingbadge.render(ratingBadgeContainer, {
+                window.gapi.ratingbadge.render(container, {
                     merchant_id: 5548164916,
-                    position: "BOTTOM_RIGHT"
+                    position: 'BOTTOM_RIGHT'
                 });
             });
-        }
+        };
     </script>
+
 
 
     <x-analytics-loader />

@@ -5,15 +5,15 @@
     {{-- Core SEO meta (title / description / keywords / og image) --}}
     <x-seo.meta :title="$seo['title'] ?? null" :description="$seo['description'] ?? null" :keywords="$seo['keywords'] ?? null" :image="$seo['image'] ?? null" />
 
-    {{-- Canonical URL (fallback to current URL) --}}
+    {{-- Canonical URL (fallback to current URL)
     <link rel="canonical" href="{{ $seo['canonical'] ?? url()->current() }}">
 
     {{-- Branding / Icons --}}
-    <link rel="icon" href="{{ asset('assets/printair/favicon.ico') }}" type="image/x-icon">
+    {{-- <link rel="icon" href="{{ asset('assets/printair/favicon.ico') }}" type="image/x-icon">
     <link rel="apple-touch-icon" sizes="180x180" href="{{ asset('assets/printair/apple-touch-icon.png') }}">
     <link rel="icon" type="image/png" sizes="32x32" href="{{ asset('assets/printair/favicon-32x32.png') }}">
     <link rel="icon" type="image/png" sizes="16x16" href="{{ asset('assets/printair/favicon-16x16.png') }}">
-    <link rel="manifest" href="{{ asset('assets/printair/site.webmanifest') }}">
+    <link rel="manifest" href="{{ asset('assets/printair/site.webmanifest') }}"> --}}
 
     {{-- Crawlers --}}
     <meta name="googlebot" content="index, follow">
@@ -53,9 +53,31 @@
             display: none !important;
         }
     </style>
+    <!-- Google Tag Manager -->
+    <script>
+        (function(w, d, s, l, i) {
+            w[l] = w[l] || [];
+            w[l].push({
+                'gtm.start': new Date().getTime(),
+                event: 'gtm.js'
+            });
+            var f = d.getElementsByTagName(s)[0],
+                j = d.createElement(s),
+                dl = l != 'dataLayer' ? '&l=' + l : '';
+            j.async = true;
+            j.src =
+                'https://www.googletagmanager.com/gtm.js?id=' + i + dl;
+            f.parentNode.insertBefore(j, f);
+        })(window, document, 'script', 'dataLayer', 'GTM-NJH5B6GV');
+    </script>
+    <!-- End Google Tag Manager -->
 </head>
 
 <body class="antialiased bg-slate-100 text-slate-900 font-sans" x-data="{}">
+    <!-- Google Tag Manager (noscript) -->
+    <noscript><iframe src="https://www.googletagmanager.com/ns.html?id=GTM-NJH5B6GV" height="0" width="0"
+            style="display:none;visibility:hidden"></iframe></noscript>
+    <!-- End Google Tag Manager (noscript) -->
     <div class="min-h-screen flex flex-col">
 
         {{-- Top bar: logo + 'Back to website' --}}
@@ -266,16 +288,19 @@
 
         <script>
             window.renderBadge = function() {
-                var ratingBadgeContainer = document.createElement("div");
-                document.body.appendChild(ratingBadgeContainer);
+                const container = document.createElement('div');
+                container.style.marginBottom = '90px'; // 👈 push above cookie banner
+                document.body.appendChild(container);
+
                 window.gapi.load('ratingbadge', function() {
-                    window.gapi.ratingbadge.render(ratingBadgeContainer, {
+                    window.gapi.ratingbadge.render(container, {
                         merchant_id: 5548164916,
-                        position: "BOTTOM_RIGHT"
+                        position: 'BOTTOM_RIGHT'
                     });
                 });
-            }
+            };
         </script>
+
 
 
         <x-analytics-loader />
