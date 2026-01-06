@@ -18,7 +18,9 @@
         x-init="init()"
     >
         <script>
-            window.__wizardHasImages = @js(count($productPayload['existing_images'] ?? []) > 0);
+            window.__wizardExistingImageCount = @js(count($productPayload['existing_images'] ?? []));
+            window.__wizardNewUploadCount = 0;
+            window.__wizardHasImages = window.__wizardExistingImageCount > 0;
         </script>
 
         {{-- Top hero --}}
@@ -792,21 +794,49 @@
                                 <div class="text-sm font-bold text-slate-900">Existing Images</div>
                                 <div class="text-xs text-slate-500">These are already saved on the product</div>
                             </div>
-                            <div class="p-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                            <div id="existing_images_grid" class="p-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
                                 @foreach (($productPayload['existing_images'] ?? []) as $img)
-                                    <div class="rounded-2xl border border-slate-200 overflow-hidden">
+                                    <div class="rounded-2xl border border-slate-200 overflow-hidden"
+                                        data-image-id="{{ $img['id'] }}">
                                         <div class="relative">
                                             <img src="{{ $img['url'] }}" alt="{{ $img['alt_text'] ?? 'Product image' }}"
                                                 class="h-44 w-full object-cover bg-slate-50">
                                             @if (!empty($img['is_featured']))
-                                                <span class="absolute top-2 left-2 rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white">
+                                                <span data-featured-badge class="absolute top-2 left-2 rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white">
                                                     Featured
                                                 </span>
                                             @endif
                                         </div>
-                                        <div class="p-3 text-xs text-slate-600">
-                                            <div class="font-semibold text-slate-900">#{{ $img['id'] }}</div>
-                                            <div class="mt-1 truncate">{{ $img['path'] }}</div>
+                                        <div class="p-3 space-y-2">
+                                            <div class="flex items-center justify-between gap-2">
+                                                <div class="text-xs font-semibold text-slate-900">#{{ $img['id'] }}</div>
+                                                <a href="{{ $img['url'] }}" target="_blank"
+                                                    class="rounded-xl border border-slate-200 bg-white px-2 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                                                    View
+                                                </a>
+                                            </div>
+
+                                            <input type="text"
+                                                value="{{ $img['alt_text'] ?? '' }}"
+                                                placeholder="Alt text (optional)"
+                                                data-alt
+                                                class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-xs focus:border-[#ff4b5c] focus:bg-white focus:ring-2 focus:ring-[#ff4b5c]/20">
+
+                                            <div class="flex items-center justify-between gap-2">
+                                                <button type="button"
+                                                    data-featured
+                                                    class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                                                    Set primary
+                                                </button>
+
+                                                <button type="button"
+                                                    data-delete
+                                                    class="rounded-xl border border-rose-200 bg-white px-3 py-1.5 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
+                                                    Delete
+                                                </button>
+                                            </div>
+
+                                            <div class="text-[11px] text-slate-500 truncate">{{ $img['path'] }}</div>
                                         </div>
                                     </div>
                                 @endforeach
@@ -1135,36 +1165,83 @@
                                         @error('seo.og_description') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
                                     </div>
 
-                                    <div class="space-y-2">
-                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
-                                            OG Image
-                                        </label>
-                                        <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-4 space-y-3">
-                                            <div class="flex items-center justify-between gap-3">
-                                                <div class="text-xs text-slate-500">
-                                                    Recommended 1200×630px · JPG/PNG/WEBP · up to 10MB.
-                                                </div>
-                                                <label class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
+	                                    <div class="space-y-2">
+	                                        <label class="mb-1 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+	                                            OG Image
+	                                        </label>
+	                                        <div class="rounded-2xl border border-dashed border-slate-200 bg-slate-50/60 px-4 py-4 space-y-3">
+                                                <input type="hidden" name="seo[remove_og_image]" x-model="seoRemoveOgImage">
+
+	                                            <div class="flex items-center justify-between gap-3">
+	                                                <div class="text-xs text-slate-500">
+	                                                    Recommended 1200×630px · JPG/PNG/WEBP · up to 10MB.
+	                                                </div>
+	                                                <label class="inline-flex cursor-pointer items-center gap-2 rounded-2xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-slate-700 hover:bg-slate-50">
                                                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
                                                         <path stroke-linecap="round" stroke-linejoin="round" d="M12 16.5V7.5m0 0L8.25 11.25M12 7.5l3.75 3.75M6 20.25h12" />
                                                     </svg>
-                                                    Upload image
-                                                    <input type="file"
-                                                        name="seo[og_image]"
-                                                        accept="image/*"
-                                                        class="hidden"
-                                                        @change="handleOgImagePreview($event)">
-                                                </label>
-                                            </div>
+	                                                    Upload image
+	                                                    <input type="file"
+                                                            id="seo_og_image_input"
+	                                                        name="seo[og_image]"
+	                                                        accept="image/*"
+	                                                        class="hidden"
+	                                                        @change="handleOgImagePreview($event)">
+	                                                </label>
+	                                            </div>
 
-                                            <template x-if="seoOgPreviewUrl">
-                                                <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
-                                                    <img :src="seoOgPreviewUrl" class="h-32 w-full object-cover" alt="OG image preview">
-                                                </div>
-                                            </template>
-                                        </div>
-                                        @error('seo.og_image') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
-                                    </div>
+                                                <template x-if="seoOgExistingUrl">
+                                                    <div class="space-y-2">
+                                                        <div class="flex items-center justify-between gap-3">
+                                                            <div class="text-[11px] font-semibold text-slate-700">Current OG image</div>
+                                                            <template x-if="!seoRemoveOgImage">
+                                                                <button type="button"
+                                                                    @click="removeExistingOgImage()"
+                                                                    class="rounded-xl border border-rose-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-rose-700 hover:bg-rose-50">
+                                                                    Remove
+                                                                </button>
+                                                            </template>
+                                                            <template x-if="seoRemoveOgImage">
+                                                                <button type="button"
+                                                                    @click="undoRemoveExistingOgImage()"
+                                                                    class="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                                                                    Undo remove
+                                                                </button>
+                                                            </template>
+                                                        </div>
+
+                                                        <template x-if="!seoRemoveOgImage">
+                                                            <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                                <img :src="seoOgExistingUrl" class="h-32 w-full object-cover" alt="Current OG image">
+                                                            </div>
+                                                        </template>
+
+                                                        <template x-if="seoRemoveOgImage">
+                                                            <div class="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-xs text-amber-900">
+                                                                Current OG image will be removed when you update.
+                                                            </div>
+                                                        </template>
+                                                    </div>
+                                                </template>
+
+                                                <template x-if="seoOgNewPreviewUrl">
+                                                    <div class="space-y-2">
+                                                        <div class="flex items-center justify-between gap-3">
+                                                            <div class="text-[11px] font-semibold text-slate-700">New OG image (will replace on update)</div>
+                                                            <button type="button"
+                                                                @click="clearNewOgImageSelection()"
+                                                                class="rounded-xl border border-slate-200 bg-white px-2.5 py-1 text-[11px] font-semibold text-slate-700 hover:bg-slate-50">
+                                                                Remove selection
+                                                            </button>
+                                                        </div>
+                                                        <div class="overflow-hidden rounded-2xl border border-slate-200 bg-white">
+                                                            <img :src="seoOgNewPreviewUrl" class="h-32 w-full object-cover" alt="New OG image preview">
+                                                        </div>
+                                                    </div>
+                                                </template>
+	                                        </div>
+	                                        @error('seo.og_image') <p class="mt-1 text-xs text-rose-600">{{ $message }}</p> @enderror
+	                                    </div>
                                 </div>
                             </div>
                         </div>
@@ -1543,7 +1620,11 @@
                     is_indexable: old?.seo?.is_indexable ?? base?.seo?.is_indexable ?? 1,
                 },
 
-                seoOgPreviewUrl: null,
+                    seoOgExistingUrl: base?.seo?.og_image_url ?? null,
+	                seoOgNewPreviewUrl: null,
+                    seoRemoveOgImage: (old?.seo?.remove_og_image !== undefined)
+                        ? Number(old.seo.remove_og_image)
+                        : 0,
 
                 rollSearch: '',
                 selectedRollIds: @json(collect(old('roll_ids', $productPayload['roll_ids'] ?? []))->map(fn($v) => (string) $v)->values()),
@@ -1851,14 +1932,29 @@
                     }
                 },
 
-                handleOgImagePreview(e) {
-                    const file = (e.target.files || [])[0];
-                    if (!file) {
-                        this.seoOgPreviewUrl = null;
-                        return;
-                    }
-                    this.seoOgPreviewUrl = URL.createObjectURL(file);
-                },
+	                handleOgImagePreview(e) {
+	                    const file = (e.target.files || [])[0];
+	                    if (!file) {
+	                        this.seoOgNewPreviewUrl = null;
+	                        return;
+	                    }
+                        this.seoRemoveOgImage = 0;
+	                    this.seoOgNewPreviewUrl = URL.createObjectURL(file);
+	                },
+
+                    removeExistingOgImage() {
+                        this.seoRemoveOgImage = 1;
+                    },
+
+                    undoRemoveExistingOgImage() {
+                        this.seoRemoveOgImage = 0;
+                    },
+
+                    clearNewOgImageSelection() {
+                        const input = document.getElementById('seo_og_image_input');
+                        if (input) input.value = '';
+                        this.seoOgNewPreviewUrl = null;
+                    },
 
                 persistState() {
                     if (mode !== 'create') return;
@@ -1966,32 +2062,34 @@
     </script>
 
     <script>
-        function productMediaImages() {
-            return {
-                previews: [],
-                primaryIndex: 0,
-                init() {},
-                handleFiles(e) {
-                    const files = Array.from(e.target.files || []);
-                    files.forEach((file) => {
-                        const key = `${file.name}-${file.size}-${Date.now()}-${Math.random()}`;
-                        const url = URL.createObjectURL(file);
-                        this.previews.push({ key, url, name: file.name });
-                    });
-                    if (this.previews.length && (this.primaryIndex === null || this.primaryIndex === undefined)) {
-                        this.primaryIndex = 0;
-                    }
-                    window.__wizardHasImages = this.previews.length > 0;
-                },
-                remove(idx) {
-                    if (idx === this.primaryIndex) this.primaryIndex = 0;
-                    this.previews.splice(idx, 1);
-                    if (this.primaryIndex >= this.previews.length) this.primaryIndex = 0;
-                    window.__wizardHasImages = this.previews.length > 0;
-                },
-                move(idx, dir) {
-                    const newIndex = idx + dir;
-                    if (newIndex < 0 || newIndex >= this.previews.length) return;
+	        function productMediaImages() {
+	            return {
+	                previews: [],
+	                primaryIndex: 0,
+	                init() {},
+	                handleFiles(e) {
+	                    const files = Array.from(e.target.files || []);
+	                    files.forEach((file) => {
+	                        const key = `${file.name}-${file.size}-${Date.now()}-${Math.random()}`;
+	                        const url = URL.createObjectURL(file);
+	                        this.previews.push({ key, url, name: file.name });
+	                    });
+	                    if (this.previews.length && (this.primaryIndex === null || this.primaryIndex === undefined)) {
+	                        this.primaryIndex = 0;
+	                    }
+                        window.__wizardNewUploadCount = this.previews.length;
+	                    window.__wizardHasImages = (Number(window.__wizardExistingImageCount || 0) > 0) || this.previews.length > 0;
+	                },
+	                remove(idx) {
+	                    if (idx === this.primaryIndex) this.primaryIndex = 0;
+	                    this.previews.splice(idx, 1);
+	                    if (this.primaryIndex >= this.previews.length) this.primaryIndex = 0;
+                        window.__wizardNewUploadCount = this.previews.length;
+	                    window.__wizardHasImages = (Number(window.__wizardExistingImageCount || 0) > 0) || this.previews.length > 0;
+	                },
+	                move(idx, dir) {
+	                    const newIndex = idx + dir;
+	                    if (newIndex < 0 || newIndex >= this.previews.length) return;
 
                     const tmp = this.previews[idx];
                     this.previews[idx] = this.previews[newIndex];
@@ -2025,6 +2123,90 @@
                     this.files[newIndex] = tmp;
                 },
             }
-        }
-    </script>
-</x-app-layout>
+	        }
+	    </script>
+
+        <script>
+            (function () {
+                const grid = document.getElementById('existing_images_grid');
+                if (!grid) return;
+
+                const csrf = @js(csrf_token());
+                const routes = {
+                    update: @js(route('admin.products.media.images.update', ['product' => $product->id, 'image' => '__IMAGE__'])),
+                    featured: @js(route('admin.products.media.images.featured', ['product' => $product->id, 'image' => '__IMAGE__'])),
+                    del: @js(route('admin.products.media.images.delete', ['product' => $product->id, 'image' => '__IMAGE__'])),
+                };
+
+                const urlFor = (tpl, id) => tpl.replace('__IMAGE__', encodeURIComponent(String(id)));
+
+                const req = (url, method, body) => fetch(url, {
+                    method,
+                    headers: {
+                        'X-CSRF-TOKEN': csrf,
+                        'Accept': 'application/json',
+                        ...(body ? { 'Content-Type': 'application/json' } : {}),
+                    },
+                    body: body ? JSON.stringify(body) : undefined,
+                }).then(async (r) => {
+                    let data = null;
+                    try { data = await r.json(); } catch (e) { /* ignore */ }
+                    return { ok: r.ok && (data?.ok ?? true), data };
+                });
+
+                const refreshWizardImageCounts = () => {
+                    const count = grid.querySelectorAll('[data-image-id]').length;
+                    window.__wizardExistingImageCount = count;
+                    window.__wizardHasImages = (count > 0) || (Number(window.__wizardNewUploadCount || 0) > 0);
+                };
+
+                const markFeatured = (featuredId) => {
+                    grid.querySelectorAll('[data-featured-badge]').forEach((b) => b.remove());
+                    grid.querySelectorAll('[data-image-id]').forEach((card) => {
+                        const id = card.getAttribute('data-image-id');
+                        if (String(id) !== String(featuredId)) return;
+                        const wrap = card.querySelector('.relative');
+                        if (!wrap) return;
+                        const badge = document.createElement('span');
+                        badge.setAttribute('data-featured-badge', '1');
+                        badge.className = 'absolute top-2 left-2 rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-semibold text-white';
+                        badge.textContent = 'Featured';
+                        wrap.appendChild(badge);
+                    });
+                };
+
+                const wire = () => {
+                    grid.querySelectorAll('[data-image-id]').forEach((card) => {
+                        const id = card.getAttribute('data-image-id');
+
+                        card.querySelector('[data-delete]')?.addEventListener('click', async () => {
+                            if (!confirm('Delete this image?')) return;
+                            const wasFeatured = !!card.querySelector('[data-featured-badge]');
+                            const res = await req(urlFor(routes.del, id), 'DELETE');
+                            if (!res.ok) return;
+                            card.remove();
+                            refreshWizardImageCounts();
+                            if (wasFeatured) {
+                                const first = grid.querySelector('[data-image-id]');
+                                if (first) markFeatured(first.getAttribute('data-image-id'));
+                            }
+                        });
+
+                        card.querySelector('[data-featured]')?.addEventListener('click', async () => {
+                            const res = await req(urlFor(routes.featured, id), 'PATCH');
+                            if (!res.ok) return;
+                            markFeatured(id);
+                        });
+
+                        card.querySelector('[data-alt]')?.addEventListener('blur', async (e) => {
+                            const val = (e.target?.value ?? '').trim();
+                            await req(urlFor(routes.update, id), 'PATCH', { alt_text: val || null });
+                        });
+                    });
+                };
+
+                wire();
+                refreshWizardImageCounts();
+            })();
+        </script>
+	</x-app-layout>

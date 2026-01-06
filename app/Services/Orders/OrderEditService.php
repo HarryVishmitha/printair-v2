@@ -23,6 +23,25 @@ class OrderEditService
                 ]);
             }
 
+            $meta = is_array($order->meta) ? $order->meta : [];
+            $quote = is_array(($meta['quote'] ?? null)) ? ($meta['quote'] ?? []) : [];
+
+            foreach ([
+                'valid_until',
+                'tax_mode',
+                'discount_mode',
+                'discount_value',
+                'notes_internal',
+                'notes_customer',
+                'terms',
+            ] as $k) {
+                if (array_key_exists($k, $payload)) {
+                    $quote[$k] = $payload[$k];
+                }
+            }
+
+            $meta['quote'] = $quote;
+
             $order->update([
                 'customer_id' => isset($payload['customer_id']) ? ($payload['customer_id'] ? (int) $payload['customer_id'] : null) : $order->customer_id,
                 'customer_snapshot' => $payload['customer_snapshot'] ?? $order->customer_snapshot,
@@ -30,6 +49,7 @@ class OrderEditService
                 'ordered_at' => $payload['ordered_at'] ?? $order->ordered_at,
                 'shipping_fee' => isset($payload['shipping_fee']) ? number_format((float) $payload['shipping_fee'], 2, '.', '') : $order->shipping_fee,
                 'other_fee' => isset($payload['other_fee']) ? number_format((float) $payload['other_fee'], 2, '.', '') : $order->other_fee,
+                'meta' => $meta,
                 'updated_by' => $actor->id,
             ]);
 
@@ -47,7 +67,7 @@ class OrderEditService
             $order->load(['items.finishings']);
 
             $subtotal = '0.00';
-            $discountTotal = '0.00';
+            $lineDiscountTotal = '0.00';
             $taxTotal = '0.00';
 
             foreach ($order->items as $it) {
@@ -59,9 +79,32 @@ class OrderEditService
                 $lineSubtotal = bcadd($lineSubtotal, $finishingsTotal, 2);
 
                 $subtotal = bcadd($subtotal, $lineSubtotal, 2);
-                $discountTotal = bcadd($discountTotal, $lineDiscount, 2);
+                $lineDiscountTotal = bcadd($lineDiscountTotal, $lineDiscount, 2);
                 $taxTotal = bcadd($taxTotal, $lineTax, 2);
             }
+
+            $meta = is_array($order->meta) ? $order->meta : [];
+            $quote = is_array(($meta['quote'] ?? null)) ? ($meta['quote'] ?? []) : [];
+
+            $quoteMode = (string) ($quote['discount_mode'] ?? 'none');
+            $quoteValue = (float) ($quote['discount_value'] ?? 0);
+            $quoteValueStr = number_format(max(0, $quoteValue), 2, '.', '');
+
+            // Quote-level discount applies after line discounts.
+            $discountBase = bcsub($subtotal, $lineDiscountTotal, 2);
+            if (bccomp($discountBase, '0', 2) === -1) {
+                $discountBase = '0.00';
+            }
+
+            $quoteDiscount = '0.00';
+            if ($quoteMode === 'percent') {
+                $pct = bcdiv($quoteValueStr, '100', 6);
+                $quoteDiscount = bcmul($discountBase, $pct, 2);
+            } elseif ($quoteMode === 'amount') {
+                $quoteDiscount = (bccomp($quoteValueStr, $discountBase, 2) === 1) ? $discountBase : $quoteValueStr;
+            }
+
+            $discountTotal = bcadd($lineDiscountTotal, $quoteDiscount, 2);
 
             $grand = $subtotal;
             $grand = bcsub($grand, $discountTotal, 2);
@@ -293,4 +336,3 @@ class OrderEditService
             ->exists();
     }
 }
-

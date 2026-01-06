@@ -2,67 +2,80 @@
 
 <x-app-layout>
     <x-slot name="sectionTitle">Sales</x-slot>
-    <x-slot name="pageTitle">{{ ($mode ?? 'edit') === 'create' ? 'New Order' : 'Edit Order' }}</x-slot>
+    <x-slot name="pageTitle">{{ $mode === 'create' ? 'New Order' : 'Edit Order' }}</x-slot>
 
     <x-slot name="breadcrumbs">
         <a href="{{ route('admin.orders.index') }}" class="text-slate-500 hover:text-slate-700">Orders</a>
         <span class="mx-1 opacity-60">/</span>
-        <span class="text-slate-900 font-medium">{{ ($mode ?? 'edit') === 'create' ? 'Create' : 'Edit' }}</span>
+        <span class="text-slate-900 font-medium">{{ $mode === 'create' ? 'Create' : 'Edit' }}</span>
     </x-slot>
 
     @php
-        $currency = $order?->currency ?? 'LKR';
-        $status = (string) ($order?->status ?? 'draft');
+        /** @var \App\Models\Order|null $order */
+        $locked = (bool) ($locked ?? false);
+        $canEdit = $order ? auth()->user()?->can('update', $order) : auth()->user()?->can('create', \App\Models\Order::class);
 
-        $snap = is_array($order?->customer_snapshot) ? $order->customer_snapshot : [];
-        if (!array_key_exists('full_name', $snap)) $snap['full_name'] = $snap['name'] ?? null;
-        if (!array_key_exists('phone', $snap)) $snap['phone'] = $snap['whatsapp_number'] ?? ($snap['whatsapp'] ?? null);
+        $currency = $order?->currency ?? 'LKR';
+
+        $meta = is_array($order?->meta) ? $order->meta : [];
+        $quote = is_array(($meta['quote'] ?? null)) ? ($meta['quote'] ?? []) : [];
 
         $initial = [
-            'id' => $order?->id,
-            'order_no' => $order?->order_no,
-            'status' => $status,
-            'working_group_id' => $order?->working_group_id ?? (auth()->user()?->working_group_id ?: 1),
+            'id' => $order->id ?? null,
+            'order_no' => $order->order_no ?? null,
+            'status' => $order->status ?? 'draft',
+            'working_group_id' => $order->working_group_id ?? (auth()->user()?->working_group_id ?: null),
             'currency' => $currency,
             'ordered_at' => optional($order?->ordered_at)->format('Y-m-d\\TH:i') ?? now()->format('Y-m-d\\TH:i'),
             'shipping_fee' => (float) ($order?->shipping_fee ?? 0),
             'other_fee' => (float) ($order?->other_fee ?? 0),
-            'customer_id' => $order?->customer_id,
-            'customer_snapshot' => $snap,
-            'items' => ($order?->items ?? collect())->map(fn($it) => [
-                'id' => (int) $it->id,
-                'product_id' => (int) $it->product_id,
-                'variant_set_item_id' => $it->variant_set_item_id ? (int) $it->variant_set_item_id : null,
-                'roll_id' => $it->roll_id ? (int) $it->roll_id : null,
-                'title' => (string) ($it->title ?? ''),
+
+            // Quote-like meta (stored in orders.meta.quote)
+            'valid_until' => $mode === 'create'
+                ? (data_get($quote, 'valid_until') ?? now()->addDays(14)->format('Y-m-d'))
+                : (data_get($quote, 'valid_until') ?? null),
+            'tax_mode' => data_get($quote, 'tax_mode', 'none'),
+            'discount_mode' => data_get($quote, 'discount_mode', 'none'),
+            'discount_value' => (float) data_get($quote, 'discount_value', 0),
+            'notes_internal' => (string) data_get($quote, 'notes_internal', ''),
+            'notes_customer' => (string) data_get($quote, 'notes_customer', ''),
+            'terms' => (string) data_get($quote, 'terms', 'To start the project, a 50% deposit is required. The remaining balance is due upon completion unless otherwise agreed in writing.'),
+
+            'customer_id' => $order?->customer_id ?? null,
+            'customer_snapshot' => $order?->customer_snapshot ?? [],
+            'items' => ($order?->items ?? collect())->map(fn ($it) => [
+                'id' => $it->id,
+                'product_id' => $it->product_id,
+                'variant_set_item_id' => $it->variant_set_item_id,
+                'options' => is_array($it->pricing_snapshot)
+                    ? ((data_get($it->pricing_snapshot, 'input.options') ?? []))
+                    : [],
+                'title' => $it->title,
                 'description' => $it->description,
-                'qty' => (int) ($it->qty ?? 1),
+                'qty' => (int) $it->qty,
                 'width' => $it->width,
                 'height' => $it->height,
                 'unit' => $it->unit,
                 'area_sqft' => $it->area_sqft,
                 'offcut_sqft' => $it->offcut_sqft,
-                'pricing_snapshot' => $it->pricing_snapshot,
-                'unit_price' => (float) ($it->unit_price ?? 0),
-                'line_subtotal' => (float) ($it->line_subtotal ?? 0),
-                'discount_amount' => (float) ($it->discount_amount ?? 0),
-                'tax_amount' => (float) ($it->tax_amount ?? 0),
-                'line_total' => (float) ($it->line_total ?? 0),
-                'finishings' => ($it->finishings ?? collect())->map(fn($f) => [
+                'roll_id' => $it->roll_id,
+                'finishings' => ($it->finishings ?? collect())->map(fn ($f) => [
                     'id' => (int) $f->id,
                     'finishing_product_id' => (int) $f->finishing_product_id,
-                    'label' => $f->label ?? $f->finishingProduct?->name ?? ('Finishing #' . $f->id),
+                    'label' => (string) ($f->label ?? ''),
                     'qty' => (int) ($f->qty ?? 1),
                     'unit_price' => (float) ($f->unit_price ?? 0),
                     'total' => (float) ($f->total ?? 0),
-                ])->values()->all(),
-            ])->values()->all(),
+                    'pricing_snapshot' => $f->pricing_snapshot,
+                ])->values(),
+                'pricing_snapshot' => $it->pricing_snapshot,
+                'unit_price' => (float) $it->unit_price,
+                'line_subtotal' => (float) $it->line_subtotal,
+                'discount_amount' => (float) ($it->discount_amount ?? 0),
+                'tax_amount' => (float) ($it->tax_amount ?? 0),
+                'line_total' => (float) $it->line_total,
+            ])->values(),
         ];
-
-        $workingGroupsForJs = ($workingGroups ?? collect())->map(fn($wg) => [
-            'id' => $wg->id,
-            'name' => $wg->name,
-        ])->values()->all();
 
         $customersForJs = ($customers ?? collect())->map(fn($c) => [
             'id' => $c->id,
@@ -70,294 +83,608 @@
             'phone' => $c->phone,
             'email' => $c->email,
             'working_group_id' => $c->working_group_id,
-        ])->values()->all();
+            'type' => $c->type,
+            'status' => $c->status,
+        ])->values();
 
-        $productsForJs = ($products ?? collect())->map(fn($p) => [
-            'id' => $p->id,
-            'name' => $p->name,
-            'code' => $p->product_code,
-        ])->values()->all();
-
-        $finishingsForJs = ($finishings ?? collect())->map(fn($p) => [
-            'id' => $p->id,
-            'name' => $p->name,
-            'code' => $p->product_code,
-        ])->values()->all();
     @endphp
 
     <div
         x-data="orderForm({
-            locked: @js(false),
+            mode: @js($mode),
+            locked: @js($locked),
+            canEdit: @js((bool) $canEdit),
             initial: @js($initial),
-            saveUrl: @js(route('admin.orders.update', $order ?? 0)),
-            previewUrl: @js($order ? route('admin.orders.show', $order) : null),
-            adminOrdersBaseUrl: @js(url('/admin/orders')),
-            workingGroups: @js($workingGroupsForJs),
             customers: @js($customersForJs),
-            products: @js($productsForJs),
-            finishings: @js($finishingsForJs),
+            products: @js([]),
+            workingGroups: @js(($workingGroups ?? collect())->map(fn($wg)=>['id'=>$wg->id,'name'=>$wg->name])->values()),
+            saveUrl: @js($mode==='create' ? route('admin.orders.store') : route('admin.orders.update', $order)),
+            previewUrl: @js($order ? route('admin.orders.show', $order) : null),
+            productsUrl: @js(route('admin.estimates.products')),
+            rollsUrlBase: @js(url('/admin/estimates/products')),
+            quoteUrl: @js(route('admin.estimates.quote')),
+            customerUsersUrl: @js(route('admin.estimates.customer-users')),
+            customerCreateUrl: @js(route('admin.estimates.customers.store')),
+            invoiceCreateUrlTemplate: @js(url('/admin/orders/__ORDER_ID__/invoices')),
+            adminOrdersBaseUrl: @js(url('/admin/orders')),
         })"
         x-init="init()"
         class="space-y-6"
     >
-        <section class="rounded-3xl border border-slate-200/80 bg-white p-6 shadow-sm">
-            <div class="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-                <div>
-                    <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Order</div>
-                    <div class="mt-1 text-xl font-black text-slate-900" x-text="state.order_no || (state.id ? ('ORD-' + state.id) : 'New order')"></div>
-                    <div class="mt-1 text-xs text-slate-500">
-                        Editable until an invoice is <span class="font-semibold">issued</span>.
+
+        {{-- HERO BAND --}}
+        <section
+            class="relative overflow-hidden rounded-3xl border border-slate-200/80 bg-gradient-to-r from-slate-900 via-slate-800 to-slate-900 px-5 py-5 sm:px-7 sm:py-6 text-white shadow-lg shadow-slate-900/20">
+            <div class="pointer-events-none absolute -right-10 -top-10 h-40 w-40 rounded-full bg-white/10 blur-3xl"></div>
+
+            <div class="relative flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+                <div class="space-y-2 max-w-2xl">
+                    <div class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs font-medium tracking-wide backdrop-blur">
+                        <span class="inline-flex h-1.5 w-1.5 rounded-full bg-emerald-300"></span>
+                        {{ $mode === 'create' ? 'Create Draft' : 'Edit Draft' }} · Orders
+                    </div>
+
+                    <div class="flex items-center gap-3 pt-1">
+                        <div class="flex h-11 w-11 items-center justify-center rounded-2xl bg-white/10 shadow-inner shadow-black/20">
+                            <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.8" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round"
+                                    d="M9 7.5h6M9 12h6m-9 7.5h12A2.25 2.25 0 0020.25 17.25V6.75A2.25 2.25 0 0018 4.5H6A2.25 2.25 0 003.75 6.75v10.5A2.25 2.25 0 006 19.5z" />
+                            </svg>
+                        </div>
+                        <div>
+                            <h2 class="text-xl sm:text-2xl font-bold leading-tight">
+                                <span x-text="mode==='create' ? 'New Order Draft' : (state.order_no ?? ('Order #' + state.id))"></span>
+                            </h2>
+                            <p class="text-xs sm:text-sm text-white/70">
+                                Build quotation lines with live totals. Locked orders are view-only.
+                            </p>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-3 pt-2">
+                        <span class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs">
+                            <span class="font-semibold">Status:</span>
+                            <span class="font-bold" x-text="state.status"></span>
+                        </span>
+
+                        <template x-if="locked">
+                            <span class="inline-flex items-center gap-2 rounded-full bg-rose-500/15 px-3 py-1 text-xs">
+                                <span class="h-1.5 w-1.5 rounded-full bg-rose-300"></span>
+                                Locked — editing disabled
+                            </span>
+                        </template>
+
+                        <span class="inline-flex items-center gap-2 rounded-full bg-white/10 px-3 py-1 text-xs">
+                            <span class="font-semibold">Items:</span>
+                            <span class="font-bold" x-text="state.items.length"></span>
+                        </span>
                     </div>
                 </div>
 
-                <div class="flex items-center gap-2">
-                    <button type="button" @click="addItem()"
-                        class="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-md shadow-black/10 hover:shadow-lg hover:-translate-y-0.5 transition-all">
+                <div class="flex flex-col items-stretch gap-2 sm:flex-row sm:items-end">
+                    <button type="button" @click="addItem()" :disabled="isReadOnly()"
+                        class="inline-flex items-center justify-center gap-2 rounded-2xl bg-white px-4 py-2.5 text-sm font-semibold text-slate-900 shadow-md shadow-black/10 hover:shadow-lg hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:hover:translate-y-0">
                         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2.4" stroke="currentColor">
                             <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
                         </svg>
                         Add Item
                     </button>
 
-                    <button type="button" @click="save('stay')" :disabled="saving"
-                        class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50">
-                        <span x-show="!saving">Save</span>
+                    <button type="button" @click="save('stay')" :disabled="saving || isReadOnly()"
+                        class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-700 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-600 disabled:opacity-50">
+                        <span x-show="!saving">Save Draft</span>
                         <span x-show="saving">Saving…</span>
+                    </button>
+
+                    <button type="button" @click="save('preview')" :disabled="saving || isReadOnly()"
+                        class="inline-flex items-center justify-center gap-2 rounded-2xl bg-emerald-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50">
+                        Save & Preview
+                    </button>
+
+                    <button type="button" @click="save('invoice')" :disabled="saving || isReadOnly()"
+                        class="inline-flex items-center justify-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50">
+                        Save + Invoice
                     </button>
                 </div>
             </div>
         </section>
 
+        {{-- KPI STRIP --}}
+        <section class="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4">
+            <template x-for="card in kpiCards()" :key="card.key">
+                <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
+                    <p class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400" x-text="card.label"></p>
+                    <p class="mt-2 text-2xl font-black text-slate-900">
+                        <span x-text="state.currency"></span>
+                        <span x-text="formatMoney(card.value())"></span>
+                    </p>
+                    <p class="mt-1 text-xs text-slate-500" x-text="card.help"></p>
+                </div>
+            </template>
+        </section>
+
+        {{-- MAIN GRID --}}
         <div class="grid grid-cols-1 gap-6 xl:grid-cols-3">
+            {{-- LEFT: CUSTOMER + META --}}
             <section class="space-y-6 xl:col-span-1">
                 <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-                    <h3 class="text-sm font-bold text-slate-900">Order meta</h3>
+                    <h3 class="text-sm font-bold text-slate-900">Customer</h3>
+                    <p class="mt-1 text-xs text-slate-500">Choose an existing customer or fill snapshot fields.</p>
+
+                    <div class="mt-4">
+                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Existing customer
+                        </label>
+
+                        <div class="flex items-center gap-2">
+                            <select x-model="state.customer_id" :disabled="isReadOnly()"
+                            class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                            <option value="">— Snapshot only —</option>
+                            <template x-for="c in filteredCustomers()" :key="c.id">
+                                <option :value="c.id" x-text="`${c.full_name} (${c.phone ?? '—'})`"></option>
+                            </template>
+                            </select>
+
+                            <button type="button" @click="openCustomerModal('walk_in')" :disabled="isReadOnly()"
+                                class="shrink-0 inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50">
+                                + Walk-in
+                            </button>
+
+                            <button type="button" @click="openCustomerModal('from_user')" :disabled="isReadOnly()"
+                                class="shrink-0 inline-flex items-center justify-center rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-xs font-semibold text-slate-700 shadow-sm hover:bg-slate-50 disabled:opacity-50">
+                                + From User
+                            </button>
+                        </div>
+                    </div>
+
                     <div class="mt-4 grid grid-cols-1 gap-3">
                         <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Working group</label>
-                            <select x-model.number="state.working_group_id" disabled
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm disabled:opacity-60">
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Name</label>
+                            <input x-model="state.customer_snapshot.full_name" :disabled="isReadOnly()"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                placeholder="Customer name" />
+                        </div>
+
+                        <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Phone</label>
+                                <input x-model="state.customer_snapshot.phone" :disabled="isReadOnly()"
+                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                    placeholder="07x..." />
+                            </div>
+                            <div>
+                                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Email</label>
+                                <input x-model="state.customer_snapshot.email" :disabled="isReadOnly()"
+                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                    placeholder="email@..." />
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-4 rounded-2xl border border-slate-200 bg-slate-50 p-4 text-xs text-slate-600">
+                        <p class="font-semibold text-slate-700">Audit snapshot</p>
+                        <p class="mt-1">Even when a customer is selected, the snapshot is stored for consistency.</p>
+                    </div>
+                </div>
+
+                <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
+                    <h3 class="text-sm font-bold text-slate-900">Settings</h3>
+
+                    <div class="mt-4 grid grid-cols-1 gap-3">
+                        <div>
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Working Group <span class="text-rose-600">*</span>
+                            </label>
+                            <select x-model="state.working_group_id" :disabled="mode !== 'create' || isReadOnly()"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                                <option value="">Select…</option>
                                 <template x-for="wg in workingGroups" :key="wg.id">
                                     <option :value="wg.id" x-text="wg.name"></option>
                                 </template>
                             </select>
                         </div>
-
-                        <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Currency</label>
-                            <input type="text" x-model="state.currency"
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                        </div>
-
-                        <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Ordered at</label>
-                            <input type="datetime-local" x-model="state.ordered_at"
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                        </div>
-
-                        <div class="grid grid-cols-2 gap-3">
-                            <div>
-                                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Shipping fee</label>
-                                <input type="number" min="0" step="0.01" x-model.number="state.shipping_fee"
-                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                            </div>
-                            <div>
-                                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Other fee</label>
-                                <input type="number" min="0" step="0.01" x-model.number="state.other_fee"
-                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                            </div>
-                        </div>
                     </div>
-                </div>
 
-                <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-                    <h3 class="text-sm font-bold text-slate-900">Customer</h3>
-                    <div class="mt-4 grid grid-cols-1 gap-3">
+	                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+	                        <div>
+	                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Currency</label>
+	                            <input x-model="state.currency" :disabled="isReadOnly()"
+	                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+	                                placeholder="LKR" />
+	                        </div>
+	                        <div>
+	                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Valid Until</label>
+	                            <input type="date" x-model="state.valid_until" :disabled="isReadOnly()"
+	                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
+	                        </div>
+	                    </div>
+
+                        <div class="mt-4">
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Ordered At</label>
+                            <input type="datetime-local" x-model="state.ordered_at" :disabled="isReadOnly()"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
+                        </div>
+
+                        <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Shipping Fee</label>
+                                <input type="number" min="0" step="0.01" x-model.number="state.shipping_fee" :disabled="isReadOnly()"
+                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
+                            </div>
+                            <div>
+                                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Other Fee</label>
+                                <input type="number" min="0" step="0.01" x-model.number="state.other_fee" :disabled="isReadOnly()"
+                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
+                            </div>
+                        </div>
+
+                    <div class="mt-4 grid grid-cols-1 gap-3 sm:grid-cols-2">
                         <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Existing customer (optional)</label>
-                            <select x-model.number="state.customer_id"
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                                <option value="">— Snapshot only —</option>
-                                <template x-for="c in customers" :key="c.id">
-                                    <option :value="c.id" x-text="`${c.full_name} (${c.phone ?? '—'})`"></option>
-                                </template>
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Discount Mode</label>
+                            <select x-model="state.discount_mode" :disabled="isReadOnly()"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                                <option value="none">None</option>
+                                <option value="percent">Percent</option>
+                                <option value="amount">Amount</option>
                             </select>
                         </div>
-
                         <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Full name</label>
-                            <input type="text" x-model="state.customer_snapshot.full_name"
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                        </div>
-                        <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Phone</label>
-                            <input type="text" x-model="state.customer_snapshot.phone"
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                        </div>
-                        <div>
-                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Email</label>
-                            <input type="email" x-model="state.customer_snapshot.email"
-                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Discount Value</label>
+                            <input type="number" step="0.01" x-model.number="state.discount_value" :disabled="isReadOnly() || state.discount_mode==='none'"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                placeholder="0" />
                         </div>
                     </div>
-                </div>
 
-                <div class="rounded-3xl border border-slate-200/80 bg-white p-5 shadow-sm">
-                    <div class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Estimated Total</div>
-                    <div class="mt-2 text-2xl font-black text-slate-900">
-                        <span x-text="state.currency"></span>
-                        <span x-text="formatMoney(grandTotal())"></span>
+                    <div class="mt-4">
+                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Tax Mode</label>
+                        <select x-model="state.tax_mode" :disabled="isReadOnly()"
+                            class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                            <option value="none">None</option>
+                            <option value="inclusive">Inclusive</option>
+                            <option value="exclusive">Exclusive</option>
+                        </select>
+                        <p class="mt-2 text-[11px] text-slate-500">Line-level tax amounts drive totals today; this field is stored for future pricing rules.</p>
                     </div>
-                    <div class="mt-1 text-xs text-slate-500">Finishings are included.</div>
                 </div>
             </section>
 
-            <section class="xl:col-span-2">
-                <div class="rounded-3xl border border-slate-200/80 bg-white shadow-sm overflow-hidden">
-                    <div class="border-b border-slate-100 bg-slate-50/60 px-6 py-4">
-                        <div class="flex items-center justify-between">
-                            <div>
-                                <h3 class="text-sm font-bold text-slate-900">Items</h3>
-                                <p class="mt-1 text-xs text-slate-500">Products and finishings (stored separately).</p>
-                            </div>
-                            <div class="text-xs text-slate-500">
-                                <span x-text="state.items.length"></span> item(s)
-                            </div>
+            {{-- RIGHT: ITEMS --}}
+            <section class="rounded-3xl border border-slate-200/80 bg-white shadow-sm overflow-hidden xl:col-span-2">
+                <div class="border-b border-slate-100 bg-slate-50/60 px-5 py-4 sm:px-6">
+                    <div class="flex items-center justify-between">
+                        <div>
+                            <h3 class="text-sm font-bold text-slate-900">Items</h3>
+                            <p class="mt-1 text-xs text-slate-500">Add quotation lines. Totals update live.</p>
                         </div>
-                    </div>
 
+                        <button type="button" @click="addItem()" :disabled="isReadOnly()"
+                            class="inline-flex items-center gap-2 rounded-2xl bg-slate-900 px-4 py-2.5 text-xs font-semibold text-white shadow-sm hover:bg-slate-800 disabled:opacity-50">
+                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+                                <path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" />
+                            </svg>
+                            Add item
+                        </button>
+                    </div>
+                </div>
+
+                <div class="p-5 sm:p-6 space-y-4">
                     <template x-if="state.items.length === 0">
-                        <div class="px-6 py-10 text-center text-sm text-slate-600">
-                            Add at least one item.
+                        <div class="rounded-3xl border border-slate-200 bg-slate-50 p-8 text-center">
+                            <div class="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-2xl bg-white text-slate-500 shadow-sm">
+                                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke-width="1.7" stroke="currentColor">
+                                    <path stroke-linecap="round" stroke-linejoin="round" d="M9 13.5h6m-6 3h6M6 3h12a2.25 2.25 0 012.25 2.25v15A.75.75 0 0119.5 21H4.5A.75.75 0 013.75 20.25v-15A2.25 2.25 0 016 3z" />
+                                </svg>
+                            </div>
+                            <h4 class="text-sm font-semibold text-slate-900">No items added</h4>
+                            <p class="mt-1 text-sm text-slate-500">Add at least one item to create a meaningful order.</p>
                         </div>
                     </template>
 
-                    <div class="divide-y divide-slate-100">
-                        <template x-for="(it, idx) in state.items" :key="it._key">
-                            <div class="px-6 py-5">
-                                <div class="flex items-start justify-between gap-3">
-                                    <div class="min-w-0">
-                                        <div class="text-sm font-extrabold text-slate-900" x-text="it.title || 'Item'"></div>
-                                        <div class="mt-1 text-xs text-slate-500">
-                                            Line total:
-                                            <span class="font-bold text-slate-900">
-                                                <span x-text="state.currency"></span>
-                                                <span x-text="formatMoney(itemTotalWithFinishings(it))"></span>
-                                            </span>
+                    <template x-for="(it, idx) in state.items" :key="it._key">
+                        <div class="rounded-3xl border border-slate-200 p-4 sm:p-5">
+                            <div class="flex items-start justify-between gap-3">
+                                <div class="min-w-0 w-full">
+	                                    <div class="flex items-center gap-2">
+	                                        <span class="inline-flex h-8 w-8 items-center justify-center rounded-2xl bg-slate-100 text-xs font-bold text-slate-600" x-text="idx+1"></span>
+
+	                                        <div class="relative w-full" @click.away="it._product_open=false">
+	                                            <button type="button" @click="openProductPicker(it)" :disabled="isReadOnly()"
+	                                                class="flex w-full items-center gap-3 rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-left text-sm text-slate-900 shadow-sm transition-all hover:bg-white focus:outline-none focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+	                                                <img :src="(productForItem(it)?.image_url || '{{ asset('assets/placeholders/product.png') }}')"
+	                                                    class="h-9 w-9 rounded-xl border border-slate-200 bg-white object-cover" alt="">
+
+	                                                <div class="min-w-0 flex-1">
+	                                                    <template x-if="productForItem(it)">
+	                                                        <div class="min-w-0">
+	                                                            <div class="truncate font-semibold" x-text="productForItem(it)?.name"></div>
+	                                                            <div class="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+	                                                                <span class="truncate" x-text="productForItem(it)?.code ? `Code: ${productForItem(it)?.code}` : ''"></span>
+	                                                                <span class="text-slate-300" x-show="productForItem(it)?.code">•</span>
+	                                                                <span class="font-semibold text-slate-700" x-text="productForItem(it)?.price_label || '—'"></span>
+	                                                            </div>
+	                                                        </div>
+	                                                    </template>
+
+	                                                    <template x-if="!productForItem(it)">
+	                                                        <div class="text-slate-500">Search product…</div>
+	                                                    </template>
+	                                                </div>
+
+	                                                <div class="text-slate-400">
+	                                                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+	                                                        <path stroke-linecap="round" stroke-linejoin="round" d="M8.25 15l3.75 3.75L15.75 15m-7.5-6l3.75-3.75L15.75 9" />
+	                                                    </svg>
+	                                                </div>
+	                                            </button>
+
+	                                            <div x-show="it._product_open" x-cloak
+	                                                class="absolute z-40 mt-2 w-full overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-xl">
+	                                                <div class="border-b border-slate-100 p-3">
+	                                                    <div class="relative">
+	                                                        <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-slate-400">
+	                                                            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke-width="2" stroke="currentColor">
+	                                                                <path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-4.35-4.35m0 0A7.5 7.5 0 105.25 5.25a7.5 7.5 0 0011.4 11.4z" />
+	                                                            </svg>
+	                                                        </span>
+	                                                        <input x-model="it._product_search" @input="searchProductsForItem(it)" :disabled="isReadOnly()"
+	                                                            class="w-full rounded-xl border border-slate-200 bg-slate-50/60 py-2 pl-9 pr-3 text-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
+	                                                            placeholder="Type product name or code…" />
+	                                                    </div>
+	                                                    <p class="mt-2 text-[11px] text-slate-500">
+	                                                        Prices are based on the selected working group.
+	                                                    </p>
+	                                                </div>
+
+	                                                <div class="max-h-80 overflow-auto divide-y divide-slate-100">
+	                                                    <template x-if="it._product_results.length === 0">
+	                                                        <div class="px-4 py-4 text-sm text-slate-500">No products found.</div>
+	                                                    </template>
+	                                                    <template x-for="p in it._product_results" :key="p.id">
+	                                                        <button type="button" @click="selectProduct(it, p)"
+	                                                            class="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-slate-50">
+	                                                            <img :src="p.image_url || '{{ asset('assets/placeholders/product.png') }}'"
+	                                                                class="h-10 w-10 rounded-xl border border-slate-200 bg-white object-cover" alt="">
+	                                                            <div class="min-w-0 flex-1">
+	                                                                <div class="truncate text-sm font-semibold text-slate-900" x-text="p.name"></div>
+	                                                                <div class="mt-0.5 flex flex-wrap items-center gap-2 text-[11px] text-slate-500">
+	                                                                    <span class="truncate" x-text="p.code ? `(${p.code})` : ''"></span>
+	                                                                    <span class="text-slate-300" x-show="p.code">•</span>
+	                                                                    <span class="font-semibold text-slate-700" x-text="p.price_label || '—'"></span>
+	                                                                    <span class="text-slate-300">•</span>
+	                                                                    <span x-text="p.is_dimension_based ? 'Dimension-based' : 'Unit/Service'"></span>
+	                                                                </div>
+	                                                            </div>
+	                                                        </button>
+	                                                    </template>
+	                                                </div>
+	                                            </div>
+	                                        </div>
+	                                    </div>
+
+                                    <template x-if="requiresDimensions(it)">
+                                        <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-3">
+                                            <div>
+                                                <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Width</label>
+                                                <input type="number" min="0.01" step="0.01" x-model.number="it.width" @input="scheduleQuote(it)" :disabled="isReadOnly()"
+                                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                                    placeholder="e.g. 24" />
+                                            </div>
+                                            <div>
+                                                <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Height</label>
+                                                <input type="number" min="0.01" step="0.01" x-model.number="it.height" @input="scheduleQuote(it)" :disabled="isReadOnly()"
+                                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                                    placeholder="e.g. 60" />
+                                            </div>
+                                            <div>
+                                                <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Unit</label>
+                                                <select x-model="it.unit" @change="scheduleQuote(it)" :disabled="isReadOnly()"
+                                                    class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                                                    <option value="in">in</option>
+                                                    <option value="ft">ft</option>
+                                                    <option value="mm">mm</option>
+                                                    <option value="cm">cm</option>
+                                                    <option value="m">m</option>
+                                                </select>
+                                            </div>
                                         </div>
-                                    </div>
-                                    <button type="button" class="rounded-xl border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-rose-600 hover:bg-rose-50"
-                                        @click="removeItem(idx)">
-                                        Remove
-                                    </button>
-                                </div>
+                                    </template>
 
-                                <div class="mt-4 grid grid-cols-1 gap-3 lg:grid-cols-12">
-                                    <div class="lg:col-span-6">
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Product</label>
-                                        <select x-model.number="it.product_id" @change="onProductChanged(it)"
-                                            class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10">
-                                            <option value="">— Select —</option>
-                                            <template x-for="p in products" :key="p.id">
-                                                <option :value="p.id" x-text="p.name"></option>
+                                    <template x-if="requiresDimensions(it) && (it._available_rolls?.length)">
+                                        <div class="mt-3">
+                                            <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Material Roll</label>
+                                            <select x-model="it.roll_choice" @change="onRollChoiceChanged(it)" :disabled="isReadOnly()"
+                                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                                                <option value="">Auto</option>
+                                                <template x-for="r in (it._available_rolls || [])" :key="r.roll_id">
+                                                    <option :value="String(r.roll_id)" x-text="`${r.name} (${Number(r.width_in).toFixed(1)}in)`"></option>
+                                                </template>
+                                            </select>
+
+                                            <template x-if="rollSummary(it)">
+                                                <div class="mt-2 rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                                                    <div class="flex flex-wrap items-center gap-2">
+                                                        <span x-text="rollSummary(it)"></span>
+                                                        <template x-if="it._roll_rotated">
+                                                            <span class="inline-flex items-center gap-1 rounded-full bg-amber-100 px-2 py-0.5 text-[11px] font-semibold text-amber-800">Rotated to fit</span>
+                                                        </template>
+                                                        <template x-if="it.area_sqft">
+                                                            <span class="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                                                                Area: <span x-text="Number(it.area_sqft).toFixed(4)"></span> sqft
+                                                            </span>
+                                                        </template>
+                                                        <template x-if="it.offcut_sqft && Number(it.offcut_sqft) > 0">
+                                                            <span class="inline-flex items-center gap-1 rounded-full bg-white px-2 py-0.5 text-[11px] font-semibold text-slate-700 ring-1 ring-slate-200">
+                                                                Offcut: <span x-text="Number(it.offcut_sqft).toFixed(4)"></span> sqft
+                                                            </span>
+                                                        </template>
+                                                    </div>
+                                                </div>
                                             </template>
-                                        </select>
-                                    </div>
+                                        </div>
+                                    </template>
 
-                                    <div class="lg:col-span-3">
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Qty</label>
-                                        <input type="number" min="1" step="1" x-model.number="it.qty" @input="recalcItem(it)"
-                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10">
-                                    </div>
+	                                    <div class="mt-3">
+	                                        <input x-model="it.title" @input="it._title_auto = false" :disabled="isReadOnly()"
+	                                            class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm font-semibold text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+	                                            placeholder="Item title (e.g., Banner Printing)" />
+	                                    </div>
 
-                                    <div class="lg:col-span-3">
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Unit price</label>
-                                        <input type="number" min="0" step="0.01" x-model.number="it.unit_price" @input="recalcItem(it)"
-                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10">
-                                    </div>
+                                    <textarea x-model="it.description" :disabled="isReadOnly()" rows="2"
+                                        class="mt-3 w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-700 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                        placeholder="Short description…"></textarea>
 
-                                    <div class="lg:col-span-12">
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Title</label>
-                                        <input type="text" x-model="it.title"
-                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10">
-                                    </div>
+	                                    {{-- Variants (Option Groups + Valid Combinations) --}}
+	                                    <template x-if="(it._option_groups || []).length">
+	                                        <div class="mt-4 rounded-3xl border border-slate-200 bg-white p-4">
+	                                            <div class="flex items-center justify-between">
+	                                                <div class="text-xs font-black text-slate-900">Variants</div>
+	                                                <button type="button"
+	                                                    class="text-[11px] font-semibold text-slate-600 hover:text-slate-900 disabled:opacity-60"
+	                                                    :disabled="isReadOnly()"
+	                                                    @click="it.options = {}; scheduleQuote(it)">
+	                                                    Clear
+	                                                </button>
+	                                            </div>
 
-                                    <div class="lg:col-span-12">
-                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Description</label>
-                                        <textarea rows="2" x-model="it.description"
-                                            class="block w-full rounded-2xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10"></textarea>
-                                    </div>
+	                                            <div class="mt-4 space-y-4">
+	                                                <template x-for="(g, gIndex) in (it._option_groups || [])" :key="g.id">
+	                                                    <div class="rounded-2xl border border-slate-200 p-4">
+	                                                        <div class="flex items-center justify-between gap-3">
+	                                                            <div class="font-semibold text-slate-900" x-text="g.name"></div>
+	                                                            <template x-if="g.is_required">
+	                                                                <span class="text-[11px] rounded-full bg-red-50 text-red-700 px-2.5 py-1 font-semibold">Required</span>
+	                                                            </template>
+	                                                            <template x-if="!g.is_required">
+	                                                                <span class="text-[11px] rounded-full bg-slate-100 text-slate-700 px-2.5 py-1 font-semibold">Optional</span>
+	                                                            </template>
+	                                                        </div>
+
+	                                                        <div class="mt-3 grid grid-cols-2 gap-2">
+	                                                            <template x-for="op in getGroupOptionsForItem(it, g, gIndex)" :key="op.id">
+	                                                                <label
+	                                                                    class="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 hover:border-slate-900/30 cursor-pointer"
+	                                                                    :class="Number(it.options?.[g.id]) === Number(op.id) ? 'border-slate-900 ring-2 ring-slate-900/10 bg-slate-900/[0.02]' : ''">
+	                                                                    <input type="radio" class="accent-slate-900"
+	                                                                        :name="`option_${it._key}_${g.id}`"
+	                                                                        :value="op.id"
+	                                                                        x-model="it.options[g.id]"
+	                                                                        @change="syncDependentSelectionsForItem(it); scheduleQuote(it)" />
+	                                                                    <span class="text-sm font-semibold text-slate-800" x-text="op.name"></span>
+	                                                                </label>
+	                                                            </template>
+	                                                        </div>
+	                                                    </div>
+	                                                </template>
+	                                            </div>
+	                                        </div>
+	                                    </template>
+
+	                                    <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-5">
+	                                        <div>
+	                                            <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Qty</label>
+	                                            <input type="number" min="1" step="1" x-model.number="it.qty" @input="scheduleQuote(it)" :disabled="isReadOnly()"
+	                                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
+	                                        </div>
+	                                        <div>
+	                                            <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Unit Price</label>
+	                                            <input type="number" min="0" step="0.01" x-model.number="it.unit_price" @input="it._manual_price=true; it._use_quoted_subtotal=false; recalcItem(it)" :disabled="isReadOnly()"
+	                                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
+	                                            <p class="mt-1 text-[11px] text-slate-500" x-show="!it._manual_price">Auto-priced from WG pricing.</p>
+	                                            <p class="mt-1 text-[11px] text-amber-700" x-show="it._manual_price">Manual override.</p>
+	                                        </div>
+	                                        <div>
+	                                            <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Line Discount</label>
+	                                            <input type="number" min="0" step="0.01" x-model.number="it.discount_amount" @input="recalcItem(it)" :disabled="isReadOnly()"
+	                                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+	                                                placeholder="0.00" />
+	                                        </div>
+	                                        <div>
+	                                            <label class="mb-2 block text-[11px] font-semibold uppercase tracking-[0.12em] text-slate-400">Line Total</label>
+	                                            <div class="rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm font-semibold text-slate-900">
+	                                                <span x-text="state.currency"></span>
+	                                                <span x-text="formatMoney(lineTotalWithFinishings(it))"></span>
+	                                            </div>
+	                                            <p class="mt-1 text-[11px] text-slate-500">
+	                                                Base: <span x-text="formatMoney(it.line_subtotal)"></span>
+	                                                <template x-if="finishingsTotal(it) > 0">
+	                                                    <span> · Finishings: <span x-text="formatMoney(finishingsTotal(it))"></span></span>
+	                                                </template>
+	                                            </p>
+	                                        </div>
+	                                        <div class="flex items-end justify-end">
+	                                            <button type="button" @click="confirmRemove(idx)" :disabled="isReadOnly()"
+	                                                class="inline-flex items-center gap-1.5 rounded-2xl border border-rose-200 bg-white px-3 py-2 text-xs font-semibold text-rose-600 shadow-sm hover:bg-rose-50 disabled:opacity-50">
+	                                                Delete
+	                                            </button>
+	                                        </div>
+	                                    </div>
                                 </div>
+                            </div>
 
+                            <div class="mt-3 flex flex-wrap items-center justify-between gap-2 text-[11px] text-slate-500">
+                                <span>Base: <span class="font-semibold text-slate-700" x-text="formatMoney(it.line_subtotal)"></span></span>
+                                <span>Finishings: <span class="font-semibold text-slate-700" x-text="formatMoney(finishingsTotal(it))"></span></span>
+                                <span>Discount: <span class="font-semibold text-slate-700" x-text="formatMoney(it.discount_amount)"></span></span>
+                                <span>Tax: <span class="font-semibold text-slate-700" x-text="formatMoney(it.tax_amount)"></span></span>
+                            </div>
+
+                            {{-- Finishings (optional) --}}
+                            <template x-if="(it.finishings || []).length">
                                 <div class="mt-4 rounded-3xl border border-slate-200 bg-slate-50 p-4">
                                     <div class="flex items-start justify-between gap-3">
                                         <div>
                                             <div class="text-xs font-black text-slate-900">Finishings</div>
-                                            <div class="mt-1 text-[11px] text-slate-500">Stored separately from product pricing.</div>
+                                            <div class="mt-1 text-[11px] text-slate-500">
+                                                Select required finishings and quantities. Pricing is auto-estimated; you can override unit prices manually.
+                                            </div>
                                         </div>
-                                        <button type="button"
-                                            class="inline-flex items-center gap-2 rounded-xl bg-white px-3 py-2 text-xs font-semibold text-slate-900 shadow-sm hover:bg-slate-50"
-                                            @click="addFinishing(it)">
-                                            Add finishing
-                                        </button>
+                                        <div class="text-[11px] text-slate-500">
+                                            Total: <span class="font-extrabold text-slate-900" x-text="state.currency + ' ' + formatMoney(finishingsTotal(it))"></span>
+                                        </div>
                                     </div>
 
-                                    <template x-if="(it.finishings || []).length === 0">
-                                        <div class="mt-3 text-xs text-slate-500">No finishings.</div>
-                                    </template>
-
-                                    <div class="mt-4 space-y-3">
-                                        <template x-for="(f, fIdx) in (it.finishings || [])" :key="f._key">
-                                            <div class="rounded-2xl border border-slate-200 bg-white p-4" :class="f.remove ? 'border-rose-200 bg-rose-50/40' : ''">
-                                                <div class="flex items-start justify-between gap-3">
-                                                    <div class="min-w-0">
-                                                        <div class="text-sm font-extrabold text-slate-900 truncate" x-text="f.label || 'Finishing'"></div>
-                                                        <div class="mt-1 text-[11px] text-slate-500">
-                                                            Total:
-                                                            <span class="font-bold text-slate-900">
-                                                                <span x-text="state.currency"></span>
-                                                                <span x-text="formatMoney(finishingTotal(f))"></span>
+                                    <div class="mt-4 space-y-2">
+                                        <template x-for="f in (it.finishings || [])" :key="f.finishing_product_id">
+                                            <div class="rounded-2xl border border-slate-200 bg-white p-4">
+                                                <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+	                                                    <label class="inline-flex items-center gap-2 text-sm font-semibold text-slate-900">
+	                                                        <input type="checkbox" class="rounded border-slate-300"
+	                                                            x-model="f.selected"
+	                                                            :disabled="isReadOnly() || f.is_required"
+	                                                            @change="onFinishingToggle(it, f)">
+	                                                        <span x-text="f.label || ('Finishing #' + f.finishing_product_id)"></span>
+	                                                        <template x-if="f.is_required">
+	                                                            <span class="ml-2 inline-flex items-center rounded-full bg-amber-100 px-2 py-0.5 text-[10px] font-semibold text-amber-800">
+	                                                                Required
                                                             </span>
-                                                        </div>
-                                                    </div>
-                                                    <label class="inline-flex items-center gap-2 text-xs font-semibold text-rose-700">
-                                                        <input type="checkbox" class="rounded border-slate-300" x-model="f.remove">
-                                                        Remove
+                                                        </template>
                                                     </label>
-                                                </div>
 
-                                                <div class="mt-3 grid grid-cols-1 gap-3 sm:grid-cols-2 lg:grid-cols-3">
-                                                    <div class="lg:col-span-2">
-                                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Finishing product</label>
-                                                        <select x-model.number="f.finishing_product_id" @change="onFinishingChanged(f)"
-                                                            :disabled="f.remove"
-                                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
-                                                            <option value="">— Select —</option>
-                                                            <template x-for="fp in finishings" :key="fp.id">
-                                                                <option :value="fp.id" x-text="fp.name"></option>
-                                                            </template>
-                                                        </select>
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Qty</label>
-                                                        <input type="number" min="1" step="1" x-model.number="f.qty" :disabled="f.remove"
-                                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
-                                                    </div>
-                                                    <div>
-                                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Unit price</label>
-                                                        <input type="number" min="0" step="0.01" x-model.number="f.unit_price" :disabled="f.remove"
-                                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
-                                                    </div>
-                                                    <div class="lg:col-span-2">
-                                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Label</label>
-                                                        <input type="text" x-model="f.label" :disabled="f.remove"
-                                                            class="block w-full rounded-2xl border border-slate-200 bg-white py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60" />
-                                                    </div>
-                                                    <div class="rounded-2xl border border-slate-200 bg-slate-50 p-3">
-                                                        <div class="text-[11px] text-slate-500">Total</div>
-                                                        <div class="mt-1 text-sm font-extrabold text-slate-900">
-                                                            <span x-text="state.currency"></span>
-                                                            <span x-text="formatMoney(finishingTotal(f))"></span>
+                                                    <div class="grid grid-cols-1 gap-2 sm:grid-cols-3 sm:items-center">
+                                                        <div>
+	                                                            <input type="number" min="1" step="1"
+	                                                                class="w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
+	                                                                x-model.number="f.qty"
+	                                                                :disabled="isReadOnly() || !f.selected"
+	                                                                @input.debounce.250ms="onFinishingQtyInput(it, f)">
+	                                                            <div class="mt-1 text-[10px] text-slate-500" x-show="f.min_qty || f.max_qty">
+	                                                                <span x-text="(f.min_qty ? ('min ' + f.min_qty) : '') + (f.max_qty ? (' max ' + f.max_qty) : '')"></span>
+	                                                            </div>
+	                                                        </div>
+
+                                                        <div>
+	                                                            <input type="number" min="0" step="0.01"
+	                                                                class="w-full rounded-2xl border border-slate-200 bg-white px-3 py-2 text-sm text-slate-900 shadow-sm disabled:opacity-60"
+	                                                                x-model.number="f.unit_price"
+	                                                                :disabled="isReadOnly() || !f.selected"
+	                                                                @input.debounce.250ms="onFinishingUnitPriceInput(it, f)">
+	                                                            <div class="mt-1 text-[10px] text-slate-500">Unit price</div>
+	                                                        </div>
+
+                                                        <div class="text-right">
+                                                            <div class="text-[11px] text-slate-500">Line</div>
+                                                            <div class="text-sm font-extrabold text-slate-900" x-text="state.currency + ' ' + formatMoney(finishingTotalInline(f))"></div>
                                                         </div>
                                                     </div>
                                                 </div>
@@ -365,199 +692,440 @@
                                         </template>
                                     </div>
                                 </div>
-                            </div>
-                        </template>
+                            </template>
+                        </div>
+                    </template>
+
+	                    <div class="rounded-3xl border border-slate-200 bg-slate-50 p-5">
+	                        <div class="flex flex-col gap-3">
+	                            <div class="flex items-center justify-between text-sm">
+	                                <div class="text-slate-600">Subtotal</div>
+	                                <div class="font-semibold text-slate-900">
+	                                    <span x-text="state.currency"></span>
+	                                    <span x-text="formatMoney(subtotal())"></span>
+	                                </div>
+	                            </div>
+
+	                            <div class="flex items-center justify-between text-sm">
+	                                <div class="text-slate-600">Line Discounts</div>
+	                                <div class="font-semibold text-slate-900">
+	                                    <span x-text="state.currency"></span>
+	                                    <span x-text="formatMoney(lineDiscountTotal())"></span>
+	                                </div>
+	                            </div>
+
+		                            <div class="flex items-center justify-between text-sm">
+		                                <div class="text-slate-600">Order Discount</div>
+		                                <div class="font-semibold text-slate-900">
+		                                    <span x-text="state.currency"></span>
+		                                    <span x-text="formatMoney(estimateDiscount())"></span>
+		                                </div>
+		                            </div>
+
+		                            <div class="flex items-center justify-between text-sm">
+		                                <div class="text-slate-600">Tax (line)</div>
+		                                <div class="font-semibold text-slate-900">
+		                                    <span x-text="state.currency"></span>
+		                                    <span x-text="formatMoney(taxTotal())"></span>
+		                                </div>
+		                            </div>
+
+		                            <div class="flex items-center justify-between text-sm">
+		                                <div class="text-slate-600">Shipping Fee</div>
+		                                <div class="font-semibold text-slate-900">
+		                                    <span x-text="state.currency"></span>
+		                                    <span x-text="formatMoney(state.shipping_fee || 0)"></span>
+		                                </div>
+		                            </div>
+
+		                            <div class="flex items-center justify-between text-sm">
+		                                <div class="text-slate-600">Other Fee</div>
+		                                <div class="font-semibold text-slate-900">
+		                                    <span x-text="state.currency"></span>
+		                                    <span x-text="formatMoney(state.other_fee || 0)"></span>
+		                                </div>
+		                            </div>
+
+		                            <div class="h-px bg-slate-200/70"></div>
+
+	                            <div class="flex items-center justify-between">
+	                                <div class="text-slate-700 font-semibold">Grand Total</div>
+	                                <div class="text-xl font-black text-slate-900">
+	                                    <span x-text="state.currency"></span>
+	                                    <span x-text="formatMoney(grandTotal())"></span>
+	                                </div>
+	                            </div>
+	                        </div>
+
+		                        <p class="mt-3 text-xs text-slate-500">
+		                            Grand total = subtotal - discounts + tax + fees.
+		                        </p>
+		                    </div>
+
+                    {{-- Notes --}}
+                    <div class="grid grid-cols-1 gap-4 lg:grid-cols-2">
+                        <div>
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Internal Notes
+                            </label>
+                            <textarea x-model="state.notes_internal" :disabled="isReadOnly()" rows="4"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                placeholder="Visible only to staff…"></textarea>
+                        </div>
+
+                        <div>
+                            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                                Customer Notes
+                            </label>
+                            <textarea x-model="state.notes_customer" :disabled="isReadOnly()" rows="4"
+                                class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                placeholder="Appears on quotation…"></textarea>
+                        </div>
+                    </div>
+
+                    <div>
+                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">
+                            Terms & Conditions
+                        </label>
+                        <textarea x-model="state.terms" :disabled="isReadOnly()" rows="4"
+                            class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                            placeholder="Delivery, payment terms, validity…"></textarea>
                     </div>
                 </div>
             </section>
         </div>
+
+        {{-- Delete Item Modal --}}
+        <div x-show="modals.remove.open" x-cloak>
+            <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm" @click="closeRemove()"></div>
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div class="w-full max-w-md rounded-3xl bg-white shadow-2xl overflow-hidden" @click.away="closeRemove()">
+                    <div class="px-6 py-5 border-b border-slate-100">
+                        <h3 class="text-lg font-bold text-slate-900">Remove item?</h3>
+                        <p class="mt-1 text-sm text-slate-500">This will remove the line from the draft.</p>
+                    </div>
+                    <div class="px-6 py-5 text-sm text-slate-700">
+                        Are you sure you want to delete this item?
+                    </div>
+                    <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex justify-end gap-3">
+                        <button class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            @click="closeRemove()">Cancel</button>
+                        <button class="rounded-xl bg-rose-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-rose-700"
+                            @click="removeConfirmed()">Delete</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        {{-- Add Customer Modal (Walk-in / From User) --}}
+        <div x-show="modals.customer.open" x-cloak>
+            <div class="fixed inset-0 z-50 bg-slate-900/60 backdrop-blur-sm" @click="closeCustomerModal()"></div>
+            <div class="fixed inset-0 z-50 flex items-center justify-center p-4">
+                <div class="w-full max-w-lg rounded-3xl bg-white shadow-2xl overflow-hidden" @click.away="closeCustomerModal()">
+                    <div class="px-6 py-5 border-b border-slate-100">
+                        <h3 class="text-lg font-bold text-slate-900" x-text="modals.customer.mode === 'walk_in' ? 'Add Walk-in Customer' : 'Create Customer From User'"></h3>
+                        <p class="mt-1 text-sm text-slate-500">
+                            Working group will be auto-selected from the customer/user.
+                        </p>
+                    </div>
+
+                    <div class="px-6 py-5 space-y-4">
+                        <template x-if="modals.customer.mode === 'walk_in'">
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Working Group</label>
+                                    <select x-model="modals.customer.walkIn.working_group_id" :disabled="isReadOnly()"
+                                        class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 py-2.5 px-3 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60">
+                                        <option value="">Select…</option>
+                                        <template x-for="wg in workingGroups" :key="wg.id">
+                                            <option :value="String(wg.id)" x-text="wg.name"></option>
+                                        </template>
+                                    </select>
+                                    <p class="mt-2 text-[11px] text-slate-500">If you already selected a WG in the order, it will be used.</p>
+                                </div>
+
+                                <div>
+                                    <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Full Name</label>
+                                    <input x-model="modals.customer.walkIn.full_name" :disabled="isReadOnly()"
+                                        class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                        placeholder="Customer name" />
+                                </div>
+
+                                <div class="grid grid-cols-1 gap-3 sm:grid-cols-2">
+                                    <div>
+                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Phone</label>
+                                        <input x-model="modals.customer.walkIn.phone" :disabled="isReadOnly()"
+                                            class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                            placeholder="07x..." />
+                                    </div>
+                                    <div>
+                                        <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Email (optional)</label>
+                                        <input x-model="modals.customer.walkIn.email" :disabled="isReadOnly()"
+                                            class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10 disabled:opacity-60"
+                                            placeholder="email@..." />
+                                    </div>
+                                </div>
+                            </div>
+                        </template>
+
+                        <template x-if="modals.customer.mode === 'from_user'">
+                            <div class="space-y-3">
+                                <div>
+                                    <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Search user</label>
+                                    <input x-model="modals.customer.user.q" @input="searchCustomerUsers()"
+                                        class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
+                                        placeholder="Name, email, WhatsApp…" />
+                                    <p class="mt-2 text-[11px] text-slate-500">Internal/staff roles are excluded automatically.</p>
+                                </div>
+
+                                <div class="rounded-2xl border border-slate-200 bg-white overflow-hidden">
+                                    <div class="max-h-56 overflow-auto divide-y divide-slate-100">
+                                        <template x-if="modals.customer.user.results.length === 0">
+                                            <div class="px-4 py-4 text-sm text-slate-500">No users found.</div>
+                                        </template>
+                                        <template x-for="u in modals.customer.user.results" :key="u.id">
+                                            <button type="button" @click="selectCustomerUser(u)"
+                                                class="w-full px-4 py-3 text-left hover:bg-slate-50">
+                                                <div class="text-sm font-semibold text-slate-900" x-text="u.full_name"></div>
+                                                <div class="mt-1 text-xs text-slate-500" x-text="`${u.email} · WG#${u.working_group_id ?? '—'}`"></div>
+                                            </button>
+                                        </template>
+                                    </div>
+                                </div>
+
+                                <template x-if="modals.customer.user.selected">
+                                    <div class="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-xs text-slate-700">
+                                        Selected: <span class="font-semibold" x-text="modals.customer.user.selected.full_name"></span>
+                                        <span class="text-slate-400">·</span>
+                                        WG: <span class="font-semibold" x-text="modals.customer.user.selected.working_group_id ?? '—'"></span>
+                                    </div>
+                                </template>
+
+                                <div>
+                                    <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.12em] text-slate-400">Phone (required)</label>
+                                    <input x-model="modals.customer.user.phone_override"
+                                        class="block w-full rounded-2xl border border-slate-200 bg-slate-50/60 px-3 py-2.5 text-sm text-slate-900 shadow-sm focus:border-slate-900 focus:bg-white focus:ring-2 focus:ring-slate-900/10"
+                                        placeholder="07x..." />
+                                    <p class="mt-2 text-[11px] text-slate-500">If the user has WhatsApp saved, it will auto-fill here.</p>
+                                </div>
+                            </div>
+                        </template>
+                    </div>
+
+                    <div class="px-6 py-4 border-t border-slate-100 bg-slate-50/60 flex justify-end gap-3">
+                        <button class="rounded-xl border border-slate-200 bg-white px-4 py-2.5 text-sm font-medium text-slate-700 hover:bg-slate-50"
+                            @click="closeCustomerModal()">Cancel</button>
+                        <button class="rounded-xl bg-slate-900 px-4 py-2.5 text-sm font-semibold text-white hover:bg-slate-800 disabled:opacity-50"
+                            :disabled="modals.customer.saving"
+                            @click="createCustomerFromModal()">
+                            <span x-show="!modals.customer.saving">Create & Use</span>
+                            <span x-show="modals.customer.saving">Creating…</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+
     </div>
 
     @push('scripts')
         <script>
-            function orderForm({ locked, initial, saveUrl, previewUrl, adminOrdersBaseUrl, workingGroups, customers, products, finishings }) {
-                const uuid = () => (globalThis.crypto?.randomUUID?.() ?? (Date.now().toString(16) + Math.random().toString(16).slice(2)));
+	            function orderForm({ mode, locked, canEdit, initial, customers, products, workingGroups, saveUrl, previewUrl, productsUrl, rollsUrlBase, quoteUrl, customerUsersUrl, customerCreateUrl, invoiceCreateUrlTemplate, adminOrdersBaseUrl }) {
+	                const uuid = () => (globalThis.crypto?.randomUUID?.() ?? (Date.now().toString(16) + Math.random().toString(16).slice(2)));
 
-                return {
-                    locked,
-                    saveUrl,
-                    previewUrl,
-                    adminOrdersBaseUrl,
-                    workingGroups,
-                    customers,
-                    products,
-                    finishings,
-                    saving: false,
+	                return {
+	                    mode, locked, canEdit,
+	                    customers, products, workingGroups,
+	                    productsUrl, rollsUrlBase, quoteUrl,
+	                    customerUsersUrl, customerCreateUrl,
+                        invoiceCreateUrlTemplate,
+                        adminOrdersBaseUrl,
+	                    saving: false,
+	                    productsById: {},
+	                    rollsByProductId: {},
 
                     state: {
                         ...initial,
-                        items: (initial.items || []).map(i => ({
-                            ...i,
-                            _key: uuid(),
-                            finishings: (i.finishings || []).map(f => ({
-                                ...f,
-                                _key: uuid(),
-                                remove: false,
-                            })),
-                        })),
+	                        items: (initial.items || []).map(i => ({
+	                            ...i,
+	                            _key: uuid(),
+	                            _product: null,
+	                            _product_open: false,
+	                            _product_search: '',
+	                            _product_search_t: null,
+	                            _product_results: [],
+	                            _title_auto: true,
+	                            options: (i.options && typeof i.options === 'object') ? i.options : {},
+	                            variant_set_item_id: i.variant_set_item_id ? String(i.variant_set_item_id) : '', // legacy (single-variant)
+	                            roll_choice: i.roll_id ? String(i.roll_id) : '',
+	                            _pricing_snapshot: i.pricing_snapshot || null,
+	                            _use_quoted_subtotal: false,
+	                            _manual_price: false,
+	                            _available_rolls: [],
+	                            _roll_auto: false,
+	                            _roll_rotated: false,
+	                            _option_groups: [],
+	                            _variant_matrix: [],
+	                            _finishings_catalog: [],
+	                            finishings: (i.finishings || []).map(f => ({
+	                                ...f,
+	                                selected: true,
+	                                _manual_price: false,
+	                            })),
+	                        })),
                         customer_snapshot: initial.customer_snapshot || {},
                     },
 
-                    init() {
-                        (this.state.items || []).forEach(it => this.recalcItem(it));
+                    modals: {
+                        remove: { open: false, idx: null },
+                        customer: {
+                            open: false,
+                            mode: 'walk_in',
+                            saving: false,
+                            walkIn: { working_group_id: '', full_name: '', phone: '', email: '' },
+                            user: { q: '', results: [], selected: null, phone_override: '' },
+                        },
                     },
 
-                    formatMoney(v) {
-                        const n = Number(v || 0);
-                        return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-                    },
+	                    init() {
+	                        this.$watch('state.working_group_id', async (val) => {
+	                            if (!val) {
+	                                this.productsById = {};
+	                                return;
+	                            }
+	                            await this.hydrateSelectedProducts();
+	                            // Re-quote items (especially when WG changes)
+	                            this.state.items.forEach(it => {
+	                                this.loadVariantsForItem(it);
+	                                this.loadFinishingsForItem(it);
+	                                this.scheduleQuote(it);
+	                            });
+	                        });
 
-                    addItem() {
-                        this.state.items.push({
-                            id: null,
-                            product_id: null,
-                            variant_set_item_id: null,
-                            roll_id: null,
-                            title: '',
-                            description: null,
-                            qty: 1,
-                            width: null,
-                            height: null,
-                            unit: null,
-                            area_sqft: null,
-                            offcut_sqft: 0,
-                            pricing_snapshot: null,
-                            unit_price: 0,
-                            line_subtotal: 0,
-                            discount_amount: 0,
-                            tax_amount: 0,
-                            line_total: 0,
-                            finishings: [],
-                            _key: uuid(),
+                        this.$watch('state.customer_id', (val) => {
+                            if (!val) return;
+                            const c = this.customers.find(x => String(x.id) === String(val));
+                            if (!c) return;
+                            if (c.working_group_id && String(this.state.working_group_id || '') !== String(c.working_group_id)) {
+                                if (this.mode === 'create') {
+                                    // WG auto-select from customer (enterprise rule)
+                                    this.state.working_group_id = Number(c.working_group_id);
+                                } else {
+                                    // edit mode: WG is immutable; block cross-WG customer selection
+                                    alert('This order belongs to a different working group. Please choose a customer from the same working group.');
+                                    this.state.customer_id = '';
+                                    return;
+                                }
+                            }
+                            this.state.customer_snapshot = {
+                                ...(this.state.customer_snapshot || {}),
+                                full_name: c.full_name ?? '',
+                                phone: c.phone ?? '',
+                                email: c.email ?? '',
+                            };
                         });
-                    },
 
-                    removeItem(idx) {
-                        this.state.items.splice(idx, 1);
-                    },
-
-                    onProductChanged(it) {
-                        const p = this.products.find(x => Number(x.id) === Number(it.product_id));
-                        if (p && !it.title) it.title = p.name;
-                        this.recalcItem(it);
-                    },
-
-                    recalcItem(it) {
-                        const qty = Math.max(1, Number(it.qty || 1));
-                        it.qty = qty;
-
-                        const unit = Math.max(0, Number(it.unit_price || 0));
-                        const subtotal = unit * qty;
-                        it.line_subtotal = Math.max(0, subtotal);
-
-                        const discount = Math.max(0, Number(it.discount_amount || 0));
-                        it.discount_amount = Math.min(discount, it.line_subtotal);
-
-                        const tax = Math.max(0, Number(it.tax_amount || 0));
-                        it.tax_amount = tax;
-
-                        it.line_total = Math.max(0, it.line_subtotal - it.discount_amount + it.tax_amount);
-                    },
-
-                    addFinishing(it) {
-                        it.finishings = it.finishings || [];
-                        it.finishings.push({
-                            id: 0,
-                            finishing_product_id: null,
-                            label: '',
-                            qty: 1,
-                            unit_price: 0,
-                            remove: false,
-                            _key: uuid(),
-                        });
-                    },
-
-                    onFinishingChanged(f) {
-                        const fp = this.finishings.find(x => Number(x.id) === Number(f.finishing_product_id));
-                        if (fp && !f.label) f.label = fp.name;
-                    },
-
-                    finishingTotal(f) {
-                        if (f.remove) return 0;
-                        const qty = Math.max(1, Number(f.qty || 1));
-                        const unit = Math.max(0, Number(f.unit_price || 0));
-                        return qty * unit;
-                    },
-
-                    finishingsTotal(it) {
-                        return (it.finishings || []).reduce((sum, f) => sum + this.finishingTotal(f), 0);
-                    },
-
-                    itemTotalWithFinishings(it) {
-                        return Number(it.line_total || 0) + this.finishingsTotal(it);
-                    },
-
-                    itemsSubtotal() {
-                        return (this.state.items || []).reduce((sum, it) => sum + this.itemTotalWithFinishings(it), 0);
-                    },
-
-                    grandTotal() {
-                        return this.itemsSubtotal()
-                            + Math.max(0, Number(this.state.shipping_fee || 0))
-                            + Math.max(0, Number(this.state.other_fee || 0));
-                    },
-
-                    async save(next) {
-                        this.saving = true;
-
-                        const missingProduct = (this.state.items || []).find(it => !it.product_id);
-                        if (missingProduct) {
-                            alert('Please select a product for every item.');
-                            this.saving = false;
-                            return;
+                        if (this.mode === 'create' && this.state.items.length === 0) {
+                            this.addItem();
                         }
 
-                        const payload = {
-                            customer_id: this.state.customer_id || null,
-                            customer_snapshot: this.state.customer_snapshot || {},
-                            currency: this.state.currency || 'LKR',
-                            ordered_at: this.state.ordered_at || null,
-                            shipping_fee: Number(this.state.shipping_fee || 0),
-                            other_fee: Number(this.state.other_fee || 0),
-                            items: (this.state.items || []).map((i, idx) => ({
-                                id: i.id || null,
-                                product_id: Number(i.product_id),
-                                variant_set_item_id: i.variant_set_item_id ? Number(i.variant_set_item_id) : null,
-                                roll_id: i.roll_id ? Number(i.roll_id) : null,
-                                title: i.title || '',
-                                description: i.description || null,
-                                qty: Number(i.qty || 1),
-                                width: i.width === null || i.width === '' ? null : Number(i.width),
-                                height: i.height === null || i.height === '' ? null : Number(i.height),
-                                unit: i.unit || null,
-                                area_sqft: i.area_sqft === null || i.area_sqft === '' ? null : Number(i.area_sqft),
-                                offcut_sqft: Number(i.offcut_sqft || 0),
-                                pricing_snapshot: i.pricing_snapshot || null,
-                                unit_price: Number(i.unit_price || 0),
-                                line_subtotal: Number(i.line_subtotal || 0),
-                                discount_amount: Number(i.discount_amount || 0),
-                                tax_amount: Number(i.tax_amount || 0),
-                                line_total: Number(i.line_total || 0),
-                                finishings: (i.finishings || []).map(f => ({
-                                    id: Number(f.id || 0),
-                                    finishing_product_id: f.finishing_product_id ? Number(f.finishing_product_id) : null,
-                                    label: f.label || null,
-                                    remove: !!f.remove,
-                                    qty: Number(f.qty || 1),
-                                    unit_price: Number(f.unit_price || 0),
-                                })),
-                                sort_order: idx,
-                            })),
-                        };
+	                        // Load products if WG already selected (edit)
+	                        if (this.state.working_group_id) {
+	                            this.hydrateSelectedProducts().then(() => {
+	                                this.state.items.forEach(it => {
+	                                    this.loadRollsForItem(it);
+	                                    this.loadVariantsForItem(it);
+	                                    this.loadFinishingsForItem(it);
+	                                    this.scheduleQuote(it);
+	                                });
+	                            });
+                        } else {
+                            this.state.items.forEach(it => this.recalcItem(it));
+                        }
+                    },
+
+                    isReadOnly() {
+                        return this.locked || !this.canEdit;
+                    },
+
+                    filteredCustomers() {
+                        const wgId = this.state.working_group_id ? Number(this.state.working_group_id) : null;
+                        if (!wgId) return this.customers;
+                        return this.customers.filter(c => Number(c.working_group_id || 0) === wgId);
+                    },
+
+                    openCustomerModal(mode) {
+                        if (this.isReadOnly()) return;
+                        this.modals.customer.open = true;
+                        this.modals.customer.mode = mode;
+                        this.modals.customer.saving = false;
+                        document.body.classList.add('overflow-hidden');
+
+                        // default WG from order selection
+                        const currentWg = this.state.working_group_id ? String(this.state.working_group_id) : '';
+                        this.modals.customer.walkIn = { working_group_id: currentWg, full_name: '', phone: '', email: '' };
+                        this.modals.customer.user = { q: '', results: [], selected: null, phone_override: '' };
+                    },
+
+                    closeCustomerModal() {
+                        this.modals.customer.open = false;
+                        document.body.classList.remove('overflow-hidden');
+                    },
+
+                    async searchCustomerUsers() {
+                        const q = (this.modals.customer.user.q || '').trim();
+                        if (q.length < 2) {
+                            this.modals.customer.user.results = [];
+                            return;
+                        }
+                        const url = new URL(this.customerUsersUrl, window.location.origin);
+                        url.searchParams.set('q', q);
+
+                        const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                        const data = await res.json().catch(() => ({}));
+                        if (!res.ok) {
+                            this.modals.customer.user.results = [];
+                            return;
+                        }
+                        this.modals.customer.user.results = data.items || [];
+                    },
+
+                    selectCustomerUser(u) {
+                        this.modals.customer.user.selected = u;
+                        this.modals.customer.user.phone_override = u.whatsapp_number || this.modals.customer.user.phone_override || '';
+
+                        if (u.working_group_id && this.mode === 'create') {
+                            this.state.working_group_id = Number(u.working_group_id);
+                        }
+                    },
+
+                    async createCustomerFromModal() {
+                        if (this.isReadOnly()) return;
+                        this.modals.customer.saving = true;
 
                         try {
-                            const res = await fetch(this.saveUrl, {
-                                method: 'PATCH',
+                            let payload = null;
+                            if (this.modals.customer.mode === 'walk_in') {
+                                const wg = this.modals.customer.walkIn.working_group_id || this.state.working_group_id;
+                                payload = {
+                                    mode: 'walk_in',
+                                    working_group_id: wg ? Number(wg) : null,
+                                    full_name: (this.modals.customer.walkIn.full_name || '').trim(),
+                                    phone: (this.modals.customer.walkIn.phone || '').trim(),
+                                    email: (this.modals.customer.walkIn.email || '').trim() || null,
+                                };
+                            } else {
+                                const u = this.modals.customer.user.selected;
+                                if (!u) throw new Error('Please select a user.');
+                                payload = {
+                                    mode: 'from_user',
+                                    user_id: Number(u.id),
+                                    phone_override: (this.modals.customer.user.phone_override || '').trim(),
+                                };
+                            }
+
+                            const res = await fetch(this.customerCreateUrl, {
+                                method: 'POST',
                                 headers: {
                                     'Content-Type': 'application/json',
                                     'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
@@ -567,17 +1135,967 @@
                             });
 
                             const data = await res.json().catch(() => ({}));
-                            if (!res.ok || !data?.ok) throw new Error(data?.message || 'Save failed');
+                            if (!res.ok || !data?.ok) {
+                                throw new Error(data?.message || 'Failed to create customer.');
+                            }
 
-                            const id = data?.id ?? this.state.id;
-                            if (id) this.state.id = id;
+                            const c = data.customer;
+                            if (!c) throw new Error('Invalid response.');
 
-                            if (next === 'stay' && data?.edit_url) {
-                                window.location.href = data.edit_url;
+                            // Add to list and select
+                            this.customers.unshift(c);
+                            this.state.customer_id = c.id;
+
+                            if (c.working_group_id && this.mode === 'create') {
+                                this.state.working_group_id = Number(c.working_group_id);
+                            }
+
+                            this.state.customer_snapshot = {
+                                ...(this.state.customer_snapshot || {}),
+                                full_name: c.full_name ?? '',
+                                phone: c.phone ?? '',
+                                email: c.email ?? '',
+                            };
+
+                            this.closeCustomerModal();
+                        } catch (e) {
+                            alert(e?.message || 'Failed to create customer.');
+                        } finally {
+                            this.modals.customer.saving = false;
+                        }
+                    },
+
+	                    onProductSelected(it) {
+	                        const prevName = it._prev_product_name ? String(it._prev_product_name) : '';
+	                        const p = this.productForItem(it);
+	                        if (!p) return;
+	                        const shouldAutoTitle =
+	                            !it.title ||
+	                            it._title_auto ||
+	                            (prevName && String(it.title) === prevName);
+	                        if (shouldAutoTitle) {
+	                            it.title = p.name;
+	                            it._title_auto = true;
+	                        }
+	                        it._prev_product_name = '';
+                        if (!this.requiresDimensions(it)) {
+                            it.width = null;
+                            it.height = null;
+                            it.unit = null;
+                            it.roll_choice = '';
+                            it.roll_id = null;
+                            it.area_sqft = null;
+                            it.offcut_sqft = 0;
+	                        } else {
+	                            if (!it.unit) it.unit = 'in';
+		                        }
+	                        it.options = {};
+	                        it.variant_set_item_id = '';
+	                        it._option_groups = [];
+	                        it._variant_matrix = [];
+	                        it._finishings_catalog = [];
+	                        it.finishings = [];
+	                        it._manual_price = false;
+	                        it._use_quoted_subtotal = false;
+	                        it._pricing_snapshot = null;
+	                        this.loadRollsForItem(it);
+	                        this.loadVariantsForItem(it);
+	                        this.loadFinishingsForItem(it);
+	                        this.scheduleQuote(it);
+	                    },
+
+	                    productForItem(it) {
+	                        if (it?._product) return it._product;
+	                        const pid = it?.product_id ? String(it.product_id) : '';
+	                        if (!pid) return null;
+	                        return this.productsById[pid] || null;
+	                    },
+
+	                    async hydrateSelectedProducts() {
+	                        const wgId = this.state.working_group_id ? Number(this.state.working_group_id) : null;
+	                        if (!wgId) return;
+
+	                        const ids = Array.from(new Set(
+	                            (this.state.items || [])
+	                                .map(i => Number(i.product_id || 0))
+	                                .filter(v => v > 0)
+	                        ));
+
+	                        if (ids.length === 0) return;
+
+	                        const url = new URL(this.productsUrl, window.location.origin);
+	                        url.searchParams.set('working_group_id', wgId);
+	                        url.searchParams.set('ids', ids.join(','));
+	                        url.searchParams.set('limit', Math.min(50, ids.length));
+
+	                        const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+	                        const data = await res.json().catch(() => ({}));
+	                        if (!res.ok) {
+	                            throw new Error(data?.message || 'Unable to load selected products');
+	                        }
+
+	                        const items = data.items || [];
+	                        items.forEach(p => {
+	                            this.productsById[String(p.id)] = p;
+	                        });
+
+	                        // Attach to items for convenience
+	                        this.state.items.forEach(it => {
+	                            const pid = it.product_id ? String(it.product_id) : '';
+	                            if (pid && this.productsById[pid]) {
+	                                it._product = this.productsById[pid];
+	                                if (!it.title || String(it.title) === String(it._product.name || '')) {
+	                                    it._title_auto = true;
+	                                } else {
+	                                    it._title_auto = false;
+	                                }
+	                            }
+	                        });
+	                    },
+
+	                    openProductPicker(it) {
+	                        if (this.isReadOnly()) return;
+	                        if (!this.state.working_group_id) {
+	                            alert('Please select a working group first.');
+	                            return;
+	                        }
+	                        // close others
+	                        this.state.items.forEach(x => { if (x !== it) x._product_open = false; });
+	                        it._product_open = !it._product_open;
+	                        if (it._product_open) {
+	                            this.searchProductsForItem(it, true);
+	                        }
+	                    },
+
+	                    searchProductsForItem(it, immediate = false) {
+	                        const wgId = this.state.working_group_id ? Number(this.state.working_group_id) : null;
+	                        if (!wgId) {
+	                            it._product_results = [];
+	                            return;
+	                        }
+
+	                        if (it._product_search_t) {
+	                            clearTimeout(it._product_search_t);
+	                        }
+
+	                        const run = async () => {
+	                            const url = new URL(this.productsUrl, window.location.origin);
+	                            url.searchParams.set('working_group_id', wgId);
+	                            url.searchParams.set('limit', 20);
+	                            const q = (it._product_search || '').trim();
+	                            if (q) url.searchParams.set('q', q);
+
+	                            const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+	                            const data = await res.json().catch(() => ({}));
+	                            if (!res.ok) {
+	                                throw new Error(data?.message || 'Unable to search products');
+	                            }
+	                            it._product_results = data.items || [];
+	                            (data.items || []).forEach(p => {
+	                                this.productsById[String(p.id)] = p;
+	                            });
+	                        };
+
+	                        if (immediate) {
+	                            run().catch(e => { console.warn(e); it._product_results = []; });
+	                            return;
+	                        }
+
+	                        it._product_search_t = setTimeout(() => {
+	                            run().catch(e => { console.warn(e); it._product_results = []; });
+	                        }, 200);
+	                    },
+
+	                    selectProduct(it, p) {
+	                        it._prev_product_name = it._product?.name ? String(it._product.name) : '';
+	                        it.product_id = String(p.id);
+	                        it._product = p;
+	                        it._product_open = false;
+	                        it._product_search = '';
+	                        it._product_results = [];
+	                        this.onProductSelected(it);
+	                    },
+
+	                    addItem() {
+	                        if (this.isReadOnly()) return;
+	                        const it = {
+	                            id: null,
+	                            _key: uuid(),
+	                            product_id: '',
+	                            _product: null,
+	                            _title_auto: true,
+	                            _product_open: false,
+	                            _product_search: '',
+	                            _product_search_t: null,
+	                            _product_results: [],
+	                            options: {},
+	                            variant_set_item_id: '', // legacy
+	                            _option_groups: [],
+	                            _variant_matrix: [],
+	                            title: '',
+	                            description: '',
+	                            qty: 1,
+	                            width: null,
+	                            height: null,
+	                            unit: 'in',
+	                            area_sqft: null,
+	                            offcut_sqft: 0,
+	                            roll_id: null,
+	                            roll_choice: '',
+	                            _finishings_catalog: [],
+	                            finishings: [],
+	                            pricing_snapshot: null,
+	                            _pricing_snapshot: null,
+	                            _use_quoted_subtotal: false,
+	                            unit_price: 0,
+	                            line_subtotal: 0,
+	                            discount_amount: 0,
+	                            tax_amount: 0,
+	                            line_total: 0,
+	                            _manual_price: false,
+                            _quote_t: null,
+	                            _available_rolls: [],
+	                            _roll_auto: false,
+	                            _roll_rotated: false,
+	                        };
+                        this.state.items.push(it);
+                        this.recalcItem(it);
+                    },
+
+                    async loadRollsForItem(it) {
+                        it._available_rolls = it._available_rolls || [];
+
+                        if (!this.requiresDimensions(it) || !it.product_id) {
+                            it._available_rolls = [];
+                            return;
+                        }
+
+                        const pid = String(it.product_id);
+                        if (this.rollsByProductId[pid]) {
+                            it._available_rolls = this.rollsByProductId[pid];
+                            if (!it.roll_choice && it.roll_id) {
+                                it.roll_choice = String(it.roll_id);
+                            }
+                            return;
+                        }
+
+                        try {
+                            const url = new URL(`${this.rollsUrlBase}/${pid}/rolls`, window.location.origin);
+                            if (this.state.working_group_id) {
+                                url.searchParams.set('working_group_id', Number(this.state.working_group_id));
+                            }
+                            const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                                throw new Error(data?.message || 'Unable to load rolls');
+                            }
+                            const list = data.items || [];
+                            this.rollsByProductId[pid] = list;
+                            it._available_rolls = list;
+                            if (!it.roll_choice && it.roll_id) {
+                                it.roll_choice = String(it.roll_id);
+                            }
+                        } catch (e) {
+                            console.warn(e);
+                            it._available_rolls = [];
+                        }
+                    },
+
+                    async loadVariantsForItem(it) {
+                        it._option_groups = it._option_groups || [];
+                        it._variant_matrix = it._variant_matrix || [];
+                        it.options = (it.options && typeof it.options === 'object') ? it.options : {};
+
+                        if (!it.product_id || !this.state.working_group_id) {
+                            it._option_groups = [];
+                            it._variant_matrix = [];
+                            it.options = {};
+                            return;
+                        }
+
+                        try {
+                            const pid = String(it.product_id);
+                            const url = new URL(`${this.rollsUrlBase}/${pid}/variants`, window.location.origin);
+                            url.searchParams.set('working_group_id', Number(this.state.working_group_id));
+
+                            const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(data?.message || 'Unable to load variants');
+
+                            it._option_groups = data.option_groups || [];
+                            it._variant_matrix = data.variant_matrix || [];
+
+                            // Clear selections that no longer exist in catalog
+                            const allowedByGroup = {};
+                            (it._option_groups || []).forEach(g => {
+                                allowedByGroup[String(g.id)] = new Set((g.options || []).map(o => String(o.id)));
+                            });
+
+                            Object.keys(it.options || {}).forEach(gid => {
+                                const oid = it.options[gid];
+                                const set = allowedByGroup[String(gid)];
+                                if (!set || !set.has(String(oid))) {
+                                    delete it.options[gid];
+                                }
+                            });
+
+                            // Ensure dependent selections remain valid
+                            this.syncDependentSelectionsForItem(it);
+                        } catch (e) {
+                            console.warn(e);
+                            it._option_groups = [];
+                            it._variant_matrix = [];
+                            it.options = {};
+                        }
+                    },
+
+                    async loadFinishingsForItem(it) {
+                        it._finishings_catalog = it._finishings_catalog || [];
+                        it.finishings = it.finishings || [];
+
+                        if (!it.product_id || !this.state.working_group_id) {
+                            it._finishings_catalog = [];
+                            it.finishings = [];
+                            return;
+                        }
+
+                        try {
+                            const pid = String(it.product_id);
+                            const url = new URL(`${this.rollsUrlBase}/${pid}/finishings`, window.location.origin);
+                            url.searchParams.set('working_group_id', Number(this.state.working_group_id));
+
+                            const res = await fetch(url.toString(), { headers: { 'Accept': 'application/json' } });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) throw new Error(data?.message || 'Unable to load finishings');
+
+                            const catalog = data.items || [];
+                            it._finishings_catalog = catalog;
+
+                            const existingById = {};
+                            (it.finishings || []).forEach(f => {
+                                existingById[String(f.finishing_product_id)] = f;
+                            });
+
+                            const merged = [];
+                            for (const c of catalog) {
+                                const fid = Number(c.finishing_product_id);
+                                const existing = existingById[String(fid)] || null;
+
+                                const isRequired = !!c.is_required;
+                                const selected = existing ? true : isRequired;
+                                const qty = existing ? Number(existing.qty || 1) : Number(c.default_qty || 1);
+                                const unitPrice = existing ? Number(existing.unit_price || 0) : Number(c.unit_price || 0);
+                                const computedTotal = Math.max(0, Math.max(1, qty) * Math.max(0, unitPrice));
+
+                                merged.push({
+                                    finishing_product_id: fid,
+                                    label: existing?.label || c.name || (`Finishing #${fid}`),
+                                    selected,
+                                    qty: Math.max(1, qty),
+                                    unit_price: unitPrice,
+                                    total: existing ? Number(existing.total || 0) : (selected ? computedTotal : 0),
+                                    pricing_snapshot: existing?.pricing_snapshot || null,
+                                    is_required: isRequired,
+                                    min_qty: c.min_qty === null || c.min_qty === undefined ? null : Number(c.min_qty),
+                                    max_qty: c.max_qty === null || c.max_qty === undefined ? null : Number(c.max_qty),
+                                    _manual_price: false,
+                                });
+                            }
+
+                            // Keep any legacy finishings that are already saved but not present in catalog
+                            for (const k of Object.keys(existingById)) {
+                                const f = existingById[k];
+                                if (!merged.some(x => String(x.finishing_product_id) === String(f.finishing_product_id))) {
+                                    merged.push({
+                                        finishing_product_id: Number(f.finishing_product_id),
+                                        label: f.label || (`Finishing #${f.finishing_product_id}`),
+                                        selected: true,
+                                        qty: Math.max(1, Number(f.qty || 1)),
+                                        unit_price: Number(f.unit_price || 0),
+                                        total: Number(f.total || 0),
+                                        pricing_snapshot: f.pricing_snapshot || null,
+                                        is_required: false,
+                                        min_qty: null,
+                                        max_qty: null,
+                                        _manual_price: false,
+                                    });
+                                }
+                            }
+
+                            it.finishings = merged;
+
+                            // (Re)quote after loading defaults
+                            this.scheduleQuote(it);
+                        } catch (e) {
+                            console.warn(e);
+                            it._finishings_catalog = [];
+                        }
+                    },
+
+                    onRollChoiceChanged(it) {
+                        // roll_choice: '' => Auto; else explicit roll
+                        if (!it.roll_choice) {
+                            // Keep persisted roll_id populated by quote for audit/production, but drive quoting with choice
+                            this.scheduleQuote(it);
+                            return;
+                        }
+                        this.scheduleQuote(it);
+                    },
+
+                    rollSummary(it) {
+                        const rollId = it.roll_id ? Number(it.roll_id) : null;
+                        if (!rollId) return '';
+
+                        const list = it._available_rolls || [];
+                        const r = list.find(x => Number(x.roll_id) === rollId);
+                        const name = r ? r.name : `Roll #${rollId}`;
+                        const w = r && r.width_in !== undefined ? ` (${Number(r.width_in).toFixed(1)}in)` : '';
+
+                        const isAuto = !it.roll_choice || it._roll_auto;
+                        return isAuto ? `Auto selected: ${name}${w}` : `Selected roll: ${name}${w}`;
+                    },
+
+	                    requiresDimensions(it) {
+	                        const p = this.productForItem(it);
+	                        return !!(p && p.is_dimension_based);
+	                    },
+
+	                    recalcItem(it) {
+	                        const qty = Math.max(0, Number(it.qty || 0));
+	                        const unit = Math.max(0, Number(it.unit_price || 0));
+	                        const subtotal = it._use_quoted_subtotal && !it._manual_price
+	                            ? Math.max(0, Number(it.line_subtotal || 0))
+	                            : Math.max(0, qty * unit);
+
+	                        const discount = Math.max(0, Math.min(Number(it.discount_amount || 0), subtotal));
+	                        const tax = Math.max(0, Number(it.tax_amount || 0));
+
+	                        it.line_subtotal = subtotal;
+	                        it.discount_amount = discount;
+	                        it.tax_amount = tax;
+	                        it.line_total = Math.max(0, it.line_subtotal - discount + tax);
+	                    },
+
+                    finishingsTotal(it) {
+                        return (it.finishings || []).reduce((s, f) => {
+                            if (!f || !f.selected) return s;
+                            const qty = Math.max(0, Number(f.qty || 0));
+                            const unit = Math.max(0, Number(f.unit_price || 0));
+                            const total = (f.total !== null && f.total !== undefined)
+                                ? Math.max(0, Number(f.total || 0))
+                                : Math.max(0, qty * unit);
+                            return s + total;
+                        }, 0);
+                    },
+
+                    getSelectedOptionsMapForItem(it) {
+                        const map = {};
+                        const raw = (it && typeof it.options === 'object' && it.options) ? it.options : {};
+                        for (const [gid, oid] of Object.entries(raw)) {
+                            if (oid) map[Number(gid)] = Number(oid);
+                        }
+                        return map;
+                    },
+
+                    getGroupOptionsForItem(it, group, groupIndex) {
+                        const groups = Array.isArray(it?._option_groups) ? it._option_groups : [];
+                        const matrix = Array.isArray(it?._variant_matrix) ? it._variant_matrix : null;
+                        if (!matrix?.length) return group?.options || [];
+
+                        const gid = Number(group?.id);
+                        const idx = Number.isFinite(groupIndex) ? groupIndex : groups.findIndex(g => Number(g.id) === gid);
+                        if (idx < 0) return group?.options || [];
+
+                        const selected = this.getSelectedOptionsMapForItem(it);
+                        const beforeGroupIds = groups
+                            .slice(0, Math.max(0, idx))
+                            .map(g => Number(g.id))
+                            .filter(gidBefore => selected[gidBefore]);
+
+                        const validRows = matrix.filter(row => {
+                            const rowMap = row?.options || row || {};
+                            return beforeGroupIds.every(gidBefore => Number(rowMap[gidBefore]) === Number(selected[gidBefore]));
+                        });
+
+                        const validOptionIds = new Set(
+                            validRows
+                                .map(row => Number((row?.options || row || {})[gid]))
+                                .filter(v => Number.isFinite(v))
+                        );
+
+                        if (validOptionIds.size === 0) return group?.options || [];
+
+                        return (group?.options || []).filter(op => validOptionIds.has(Number(op.id)));
+                    },
+
+                    syncDependentSelectionsForItem(it) {
+                        const groups = Array.isArray(it?._option_groups) ? it._option_groups : [];
+                        const matrix = Array.isArray(it?._variant_matrix) ? it._variant_matrix : null;
+                        if (!matrix?.length || groups.length === 0) return;
+
+                        it.options = (it.options && typeof it.options === 'object') ? it.options : {};
+
+                        const selected = this.getSelectedOptionsMapForItem(it);
+
+                        for (let i = 0; i < groups.length; i++) {
+                            const g = groups[i];
+                            const gid = Number(g.id);
+                            const current = selected[gid];
+
+                            if (!current) continue;
+
+                            const validIds = this.getGroupOptionsForItem(it, g, i).map(o => Number(o.id));
+                            if (!validIds.includes(Number(current))) {
+                                for (let j = i; j < groups.length; j++) {
+                                    const gid2 = Number(groups[j].id);
+                                    delete it.options[gid2];
+                                }
+                                break;
+                            }
+                        }
+                    },
+
+                    clampFinishingQty(f) {
+                        let qty = Number(f?.qty || 0);
+                        qty = Number.isFinite(qty) ? qty : 0;
+                        qty = Math.max(0, qty);
+
+                        const min = f?.min_qty === null || f?.min_qty === undefined ? null : Number(f.min_qty);
+                        const max = f?.max_qty === null || f?.max_qty === undefined ? null : Number(f.max_qty);
+
+                        if (min !== null && Number.isFinite(min)) qty = Math.max(qty, min);
+                        if (max !== null && Number.isFinite(max)) qty = Math.min(qty, max);
+
+                        qty = Math.max(1, qty);
+                        f.qty = qty;
+                    },
+
+                    recalcFinishingLine(f) {
+                        const qty = Math.max(0, Number(f?.qty || 0));
+                        const unit = Math.max(0, Number(f?.unit_price || 0));
+                        f.total = Math.max(0, qty * unit);
+                    },
+
+                    onFinishingToggle(it, f) {
+                        if (!f) return;
+                        if (f.selected) {
+                            this.clampFinishingQty(f);
+                            this.recalcFinishingLine(f);
+                        } else {
+                            f.total = 0;
+                        }
+                        this.scheduleQuote(it);
+                    },
+
+                    onFinishingQtyInput(it, f) {
+                        if (!f) return;
+                        this.clampFinishingQty(f);
+                        this.recalcFinishingLine(f);
+                        this.scheduleQuote(it);
+                    },
+
+                    onFinishingUnitPriceInput(_it, f) {
+                        if (!f) return;
+                        f._manual_price = true;
+                        this.clampFinishingQty(f);
+                        this.recalcFinishingLine(f);
+                    },
+
+                    finishingTotalInline(f) {
+                        if (!f || !f.selected) return 0;
+                        const qty = Math.max(0, Number(f.qty || 0));
+                        const unit = Math.max(0, Number(f.unit_price || 0));
+                        if (f.total !== null && f.total !== undefined) {
+                            return Math.max(0, Number(f.total || 0));
+                        }
+                        return Math.max(0, qty * unit);
+                    },
+
+                    lineTotalWithFinishings(it) {
+                        return Math.max(0, Number(it.line_total || 0)) + this.finishingsTotal(it);
+                    },
+
+	                    async loadProducts() {
+	                        // Legacy method retained for backwards compatibility.
+	                        // We now fetch products on-demand (search/lookup) for scale.
+	                        await this.hydrateSelectedProducts();
+	                    },
+
+                    scheduleQuote(it) {
+                        if (this.isReadOnly()) {
+                            this.recalcItem(it);
+                            return;
+                        }
+
+                        if (!it.product_id || !this.state.working_group_id) {
+                            this.recalcItem(it);
+                            return;
+                        }
+
+                        if (it._quote_t) {
+                            clearTimeout(it._quote_t);
+                        }
+
+                        it._quote_t = setTimeout(() => this.quoteItem(it), 250);
+                    },
+
+                    async quoteItem(it) {
+                        if (!it.product_id || !this.state.working_group_id) return;
+
+                        // For dimension-based products, require dimensions before quoting
+                        if (this.requiresDimensions(it)) {
+                            if (!it.width || !it.height || !it.unit) {
+                                return;
+                            }
+                        }
+
+                        const normalizedDim = (v) => {
+                            if (v === null || v === undefined || v === '') return null;
+                            const n = Number(v);
+                            return Number.isFinite(n) && n > 0 ? n : null;
+                        };
+                        const normalizedUnit = (v) => {
+                            if (typeof v !== 'string') return 'in';
+                            const s = v.trim();
+                            return ['in', 'ft', 'mm', 'cm', 'm'].includes(s) ? s : 'in';
+                        };
+
+                        const payload = {
+                            working_group_id: Number(this.state.working_group_id),
+                            product_id: Number(it.product_id),
+                            qty: Number(it.qty || 1),
+                            width: this.requiresDimensions(it) ? normalizedDim(it.width) : null,
+                            height: this.requiresDimensions(it) ? normalizedDim(it.height) : null,
+                            unit: this.requiresDimensions(it) ? normalizedUnit(it.unit) : null,
+                            roll_id: this.requiresDimensions(it) ? (it.roll_choice ? Number(it.roll_choice) : null) : null,
+                            options: (it.options && typeof it.options === 'object') ? it.options : {},
+                            finishings: (() => {
+                                const out = {};
+                                (it.finishings || []).forEach(f => {
+                                    if (!f?.selected) return;
+                                    const fid = Number(f.finishing_product_id || 0);
+                                    const qty = Number(f.qty || 0);
+                                    if (fid > 0 && qty > 0) out[String(fid)] = qty;
+                                });
+                                return out;
+                            })(),
+                        };
+
+                        try {
+                            const res = await fetch(this.quoteUrl, {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                    'Accept': 'application/json',
+                                },
+                                body: JSON.stringify(payload),
+                            });
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || !data?.ok) {
+                                throw new Error(data?.message || 'Quote failed');
+                            }
+
+	                            const q = data.data;
+	                            if (!q) return;
+	
+	                            it._pricing_snapshot = q.pricing_snapshot || null;
+
+	                            // Always sync qty-derived fields
+	                            it.qty = q.qty;
+
+                            // Dimension-related fields
+                            it.width = q.width ?? it.width;
+                            it.height = q.height ?? it.height;
+                            it.unit = q.unit ?? it.unit;
+                            it.area_sqft = q.area_sqft ?? it.area_sqft;
+                            it.offcut_sqft = q.offcut_sqft ?? it.offcut_sqft;
+                            it.roll_id = q.roll_id ?? it.roll_id; // persist chosen roll (even when choice is Auto)
+	                            it._roll_auto = !!q.roll_auto;
+	                            it._roll_rotated = !!q.roll_rotated;
+
+                                // Variant selection (echo-back)
+                                if (q.options && typeof q.options === 'object') {
+                                    it.options = q.options;
+                                    this.syncDependentSelectionsForItem(it);
+                                }
+
+                                // Finishings pricing lines
+                                if (Array.isArray(q.finishings)) {
+                                    it.finishings = it.finishings || [];
+                                    for (const fr of q.finishings) {
+                                        const fid = Number(fr.finishing_product_id || 0);
+                                        if (!fid) continue;
+                                        const idx = it.finishings.findIndex(x => Number(x.finishing_product_id) === fid);
+
+                                        const prev = idx >= 0 ? it.finishings[idx] : null;
+                                        const manual = !!prev?._manual_price;
+
+                                        const manualUnit = Number(prev?.unit_price || 0);
+                                        const serverQty = Number(fr.qty || 1);
+
+                                        const next = {
+                                            finishing_product_id: fid,
+                                            label: fr.label || (`Finishing #${fid}`),
+                                            selected: true,
+                                            qty: serverQty,
+                                            unit_price: manual ? manualUnit : Number(fr.unit_price || 0),
+                                            total: manual ? Math.max(0, serverQty * manualUnit) : Number(fr.total || 0),
+                                            pricing_snapshot: fr.pricing_snapshot || null,
+                                            is_required: prev?.is_required || false,
+                                            min_qty: prev?.min_qty ?? null,
+                                            max_qty: prev?.max_qty ?? null,
+                                            _manual_price: manual,
+                                        };
+
+                                        if (idx >= 0) it.finishings[idx] = { ...it.finishings[idx], ...next };
+                                        else it.finishings.push(next);
+                                    }
+                                }
+
+	                            // Only set unit_price if admin has not overridden it
+	                            if (!it._manual_price) {
+	                                it.unit_price = Number(q.unit_price || 0);
+	                                it.line_subtotal = Number(q.line_subtotal || 0);
+	                                it._use_quoted_subtotal = true;
+	                            }
+
+	                            // Always recompute line_total using current discount/tax (don’t overwrite admin-entered discounts)
+	                            this.recalcItem(it);
+		                        } catch (e) {
+	                            // Keep silent (avoid spam); admin can still edit manually
+	                            console.warn(e);
+	                        }
+	                    },
+
+                    subtotal() {
+                        return this.state.items.reduce((s, it) => s + Number(it.line_subtotal || 0) + this.finishingsTotal(it), 0);
+                    },
+
+	                    lineDiscountTotal() {
+	                        return this.state.items.reduce((s, it) => s + Number(it.discount_amount || 0), 0);
+	                    },
+
+                    taxTotal() {
+                        return this.state.items.reduce((s, it) => s + Number(it.tax_amount || 0), 0);
+                    },
+
+	                    estimateDiscount() {
+	                        const mode = this.state.discount_mode || 'none';
+	                        const v = Math.max(0, Number(this.state.discount_value || 0));
+	                        if (mode === 'none') return 0;
+
+	                        const base = Math.max(0, this.subtotal() - this.lineDiscountTotal());
+	                        if (base <= 0) return 0;
+
+	                        if (mode === 'percent') return Math.min(base, base * (v / 100));
+	                        if (mode === 'amount') return Math.min(base, v);
+
+	                        return 0;
+	                    },
+
+	                    discountTotal() {
+	                        return this.lineDiscountTotal() + this.estimateDiscount();
+	                    },
+
+	                    grandTotal() {
+	                        const shipping = Math.max(0, Number(this.state.shipping_fee || 0));
+	                        const other = Math.max(0, Number(this.state.other_fee || 0));
+	                        return Math.max(0, this.subtotal() - this.discountTotal() + this.taxTotal() + shipping + other);
+	                    },
+
+	                    kpiCards() {
+	                        return [
+	                            { key: 'sub', label: 'Subtotal', help: 'Lines + finishings', value: () => this.subtotal() },
+	                            { key: 'disc', label: 'Discount', help: 'Line + order discount', value: () => this.discountTotal() },
+	                            { key: 'tax', label: 'Tax', help: 'Sum of line taxes', value: () => this.taxTotal() },
+	                            { key: 'grand', label: 'Grand Total', help: 'Subtotal - discounts + tax + fees', value: () => this.grandTotal() },
+	                        ];
+	                    },
+
+                    formatMoney(v) {
+                        const n = Number(v || 0);
+                        return n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+                    },
+
+                    confirmRemove(idx) {
+                        this.modals.remove = { open: true, idx };
+                        document.body.classList.add('overflow-hidden');
+                    },
+
+                    closeRemove() {
+                        this.modals.remove.open = false;
+                        this.modals.remove.idx = null;
+                        document.body.classList.remove('overflow-hidden');
+                    },
+
+	                    removeConfirmed() {
+	                        const idx = this.modals.remove.idx;
+	                        if (idx === null) return;
+	                        this.state.items.splice(idx, 1);
+	                        this.closeRemove();
+	                    },
+
+                        invoiceUrl(orderId) {
+                            const tpl = String(this.invoiceCreateUrlTemplate || '');
+                            return tpl.replace('__ORDER_ID__', encodeURIComponent(String(orderId)));
+                        },
+
+                        async createInvoice(orderId) {
+                            const res = await fetch(this.invoiceUrl(orderId), {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                    'Accept': 'application/json',
+                                },
+                                body: JSON.stringify({ type: 'final' }),
+                            });
+
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok || !data?.ok) {
+                                throw new Error(data?.message || 'Invoice creation failed');
+                            }
+
+                            window.location.href = data?.edit_url || data?.redirect_url;
+                        },
+
+	                    async save(next) {
+	                        if (this.isReadOnly()) return;
+
+                        if (this.mode === 'create' && !this.state.working_group_id) {
+                            alert('Working group is required.');
+                            return;
+                        }
+
+                        // Basic item guard (DB requires product_id)
+                        const missingProduct = this.state.items.find(it => !it.product_id);
+                        if (missingProduct) {
+                            alert('Please select a product for every item.');
+                            return;
+                        }
+
+                        this.saving = true;
+
+                        const normalizedDim = (v) => {
+                            if (v === null || v === undefined || v === '') return null;
+                            const n = Number(v);
+                            return Number.isFinite(n) && n > 0 ? n : null;
+                        };
+                        const normalizedNonNegative = (v) => {
+                            if (v === null || v === undefined || v === '') return null;
+                            const n = Number(v);
+                            return Number.isFinite(n) && n >= 0 ? n : null;
+                        };
+                        const normalizedUnit = (v) => {
+                            if (typeof v !== 'string') return 'in';
+                            const s = v.trim();
+                            return ['in', 'ft', 'mm', 'cm', 'm'].includes(s) ? s : 'in';
+                        };
+
+	                        const payload = {
+	                            ...(this.mode === 'create' ? { working_group_id: Number(this.state.working_group_id) } : {}),
+
+	                            customer_id: this.state.customer_id ? Number(this.state.customer_id) : null,
+	                            customer_snapshot: this.state.customer_snapshot || {},
+	                            currency: this.state.currency || 'LKR',
+	                            ordered_at: this.state.ordered_at || null,
+	                            shipping_fee: Number(this.state.shipping_fee || 0),
+	                            other_fee: Number(this.state.other_fee || 0),
+	                            valid_until: this.state.valid_until || null,
+
+	                            tax_mode: this.state.tax_mode || 'none',
+	                            discount_mode: this.state.discount_mode || 'none',
+	                            discount_value: Number(this.state.discount_value || 0),
+
+                            notes_internal: this.state.notes_internal || null,
+                            notes_customer: this.state.notes_customer || null,
+                            terms: this.state.terms || null,
+
+	                            items: this.state.items.map(i => ({
+	                                id: i.id || null,
+	                                product_id: Number(i.product_id),
+	                                options: (i.options && typeof i.options === 'object') ? i.options : {},
+	                                title: i.title || '',
+	                                description: i.description || null,
+	                                qty: Number(i.qty || 0),
+	                                width: this.requiresDimensions(i) ? normalizedDim(i.width) : null,
+	                                height: this.requiresDimensions(i) ? normalizedDim(i.height) : null,
+		                                unit: this.requiresDimensions(i) ? normalizedUnit(i.unit) : null,
+		                                area_sqft: this.requiresDimensions(i) ? normalizedNonNegative(i.area_sqft) : null,
+		                                offcut_sqft: Number(i.offcut_sqft || 0),
+		                                roll_id: i.roll_choice ? Number(i.roll_choice) : (i.roll_id ? Number(i.roll_id) : null),
+		                                finishings: (i.finishings || []).flatMap(f => {
+		                                    const pid = Number(f?.finishing_product_id || 0);
+		                                    if (!pid) return [];
+		                                    const existingId = Number(f?.id || 0);
+
+		                                    if (!f?.selected) {
+		                                        return existingId ? [{ id: existingId, finishing_product_id: pid, remove: true }] : [];
+		                                    }
+
+		                                    return [{
+		                                        id: existingId || null,
+		                                        finishing_product_id: pid,
+		                                        label: f?.label || (`Finishing #${pid}`),
+		                                        remove: false,
+		                                        qty: Number(f?.qty || 1),
+		                                        unit_price: Number(f?.unit_price || 0),
+		                                    }];
+		                                }),
+		                                pricing_snapshot: i._pricing_snapshot || i.pricing_snapshot || null,
+		                                unit_price: Number(i.unit_price || 0),
+		                                line_subtotal: Number(i.line_subtotal || 0),
+		                                discount_amount: Number(i.discount_amount || 0),
+	                                tax_amount: Number(i.tax_amount || 0),
+	                                line_total: Number(i.line_total || 0),
+	                            })),
+	                        };
+
+                        try {
+                            const res = await fetch(saveUrl, {
+                                method: this.mode === 'create' ? 'POST' : 'PATCH',
+                                headers: {
+                                    'Content-Type': 'application/json',
+                                    'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+                                    'Accept': 'application/json',
+                                },
+                                body: JSON.stringify(payload),
+                            });
+
+                            const data = await res.json().catch(() => ({}));
+                            if (!res.ok) {
+                                throw new Error(data?.message || 'Save failed');
+                            }
+
+	                            const id = data?.id ?? this.state.id;
+	                            if (id) this.state.id = id;
+
+	                            const showUrl = data?.redirect_url || (id ? `${this.adminOrdersBaseUrl}/${id}` : null);
+	                            const editUrl = data?.edit_url || (id ? `${this.adminOrdersBaseUrl}/${id}/edit` : null);
+
+                            if (next === 'stay' && editUrl) {
+                                window.location.href = editUrl;
                                 return;
                             }
 
-                            window.location.href = data?.redirect_url || this.previewUrl || `${this.adminOrdersBaseUrl}/${id}`;
+	                            if (next === 'invoice' && id) {
+	                                if (!Array.isArray(this.state.items) || this.state.items.length === 0) {
+	                                    throw new Error('Add at least one item before creating an invoice.');
+	                                }
+	                                await this.createInvoice(id);
+	                                return;
+	                            }
+
+                            if (next === 'preview' && showUrl) {
+                                window.location.href = showUrl;
+                                return;
+                            }
+
+                            if (showUrl) {
+                                window.location.href = showUrl;
+                                return;
+                            }
                         } catch (e) {
                             alert(e?.message || 'Save failed');
                         } finally {
@@ -589,4 +2107,3 @@
         </script>
     @endpush
 </x-app-layout>
-

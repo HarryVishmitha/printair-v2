@@ -764,6 +764,9 @@ class ProductController extends Controller
                     'canonical_url' => $product->seo->canonical_url,
                     'is_indexable' => (int) ($product->seo->is_indexable ? 1 : 0),
                     'og_image_path' => $product->seo->og_image_path,
+                    'og_image_url' => $product->seo->og_image_path
+                        ? Storage::url($product->seo->og_image_path)
+                        : null,
                 ] : null,
 
                 'roll_ids' => $selectedRollIds,
@@ -1254,11 +1257,19 @@ class ProductController extends Controller
                     'seo.og_description' => ['nullable', 'string', 'max:255'],
                     'seo.canonical_url' => ['nullable', 'url', 'max:500'],
                     'seo.is_indexable' => ['nullable', 'in:0,1'],
+                    'seo.remove_og_image' => ['nullable', 'in:0,1'],
                     'seo.og_image' => ['nullable', 'file', 'mimes:jpg,jpeg,png,webp', 'max:10240'],
                 ])->validate();
 
                 $seoInput = $seoValidated['seo'] ?? [];
                 $userId = Auth::user()?->id;
+
+                $existingSeo = $product->seo;
+                $existingOgPath = $existingSeo?->og_image_path;
+
+                $removeOgImage = array_key_exists('remove_og_image', $seoInput)
+                    ? ((int) $seoInput['remove_og_image'] === 1)
+                    : false;
 
                 $ogImagePath = null;
                 if ($request->hasFile('seo.og_image')) {
@@ -1302,10 +1313,17 @@ class ProductController extends Controller
                 ];
 
                 if ($ogImagePath) {
+                    if ($existingOgPath && Storage::disk('public')->exists($existingOgPath)) {
+                        Storage::disk('public')->delete($existingOgPath);
+                    }
                     $payload['og_image_path'] = $ogImagePath;
+                } elseif ($removeOgImage) {
+                    if ($existingOgPath && Storage::disk('public')->exists($existingOgPath)) {
+                        Storage::disk('public')->delete($existingOgPath);
+                    }
+                    $payload['og_image_path'] = null;
                 }
 
-                $existingSeo = $product->seo;
                 if ($existingSeo) {
                     $existingSeo->fill($payload);
                     if (! $existingSeo->created_by) {

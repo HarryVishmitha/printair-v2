@@ -42,6 +42,15 @@ class BillingController extends Controller
             ['reason' => $data['reason'] ?? null]
         );
 
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'id' => $invoice->id,
+                'redirect_url' => route('admin.invoices.show', $invoice),
+                'edit_url' => route('admin.invoices.edit', $invoice),
+            ]);
+        }
+
         return redirect()
             ->route('admin.invoices.edit', $invoice)
             ->with('success', 'Invoice created.');

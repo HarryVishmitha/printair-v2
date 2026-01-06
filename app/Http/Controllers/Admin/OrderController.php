@@ -65,11 +65,20 @@ class OrderController extends Controller
         $customers = Customer::query()
             ->when(! $actor?->isAdminOrSuperAdmin(), fn ($q) => $q->where('working_group_id', $actor?->working_group_id))
             ->orderBy('full_name')
-            ->limit(200)
-            ->get(['id', 'full_name', 'phone', 'email', 'working_group_id']);
-        return view('admin.orders.create', [
+            ->limit(500)
+            ->get(['id', 'full_name', 'phone', 'email', 'working_group_id', 'type', 'status']);
+
+        $mode = 'create';
+        $order = null;
+        $locked = false;
+
+        return view('admin.orders.form', [
+            'mode' => $mode,
+            'order' => $order,
             'workingGroups' => $workingGroups,
             'customers' => $customers,
+            'products' => collect(),
+            'locked' => $locked,
         ]);
     }
 
@@ -84,8 +93,51 @@ class OrderController extends Controller
 
         $data = $request->validate([
             'working_group_id' => ['required', 'integer', 'exists:working_groups,id'],
-            'currency' => ['nullable', 'string', 'max:3'],
+            'currency' => ['nullable', 'string', 'max:8'],
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
+            'customer_snapshot' => ['nullable', 'array'],
+            'ordered_at' => ['nullable', 'date'],
+            'shipping_fee' => ['nullable', 'numeric'],
+            'other_fee' => ['nullable', 'numeric'],
+
+            // Quote-like fields (stored in orders.meta.quote)
+            'valid_until' => ['nullable', 'date'],
+            'tax_mode' => ['nullable', 'string', 'in:none,inclusive,exclusive'],
+            'discount_mode' => ['nullable', 'string', 'in:none,percent,amount'],
+            'discount_value' => ['nullable', 'numeric', 'min:0'],
+            'notes_internal' => ['nullable', 'string', 'max:5000'],
+            'notes_customer' => ['nullable', 'string', 'max:5000'],
+            'terms' => ['nullable', 'string', 'max:8000'],
+
+            // Optional (quotation-style) items payload
+            'items' => ['nullable', 'array'],
+            'items.*.id' => ['nullable', 'integer'],
+            'items.*.product_id' => ['required_with:items', 'integer', 'exists:products,id'],
+            'items.*.variant_set_item_id' => ['nullable', 'integer'],
+            'items.*.roll_id' => ['nullable', 'integer'],
+            'items.*.title' => ['nullable', 'string', 'max:255'],
+            'items.*.description' => ['nullable', 'string'],
+            'items.*.qty' => ['nullable', 'integer', 'min:1'],
+            'items.*.width' => ['nullable', 'numeric', 'min:0'],
+            'items.*.height' => ['nullable', 'numeric', 'min:0'],
+            'items.*.unit' => ['nullable', 'string', 'max:10'],
+            'items.*.area_sqft' => ['nullable', 'numeric', 'min:0'],
+            'items.*.offcut_sqft' => ['nullable', 'numeric', 'min:0'],
+            'items.*.pricing_snapshot' => ['nullable', 'array'],
+            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.line_subtotal' => ['nullable', 'numeric', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.line_total' => ['nullable', 'numeric', 'min:0'],
+            'items.*.sort_order' => ['nullable', 'integer', 'min:0'],
+
+            'items.*.finishings' => ['nullable', 'array'],
+            'items.*.finishings.*.id' => ['nullable', 'integer'],
+            'items.*.finishings.*.finishing_product_id' => ['required_with:items.*.finishings', 'integer', 'exists:products,id'],
+            'items.*.finishings.*.label' => ['nullable', 'string', 'max:255'],
+            'items.*.finishings.*.remove' => ['nullable', 'boolean'],
+            'items.*.finishings.*.qty' => ['nullable', 'integer', 'min:1'],
+            'items.*.finishings.*.unit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         $wgId = (int) $data['working_group_id'];
@@ -98,7 +150,7 @@ class OrderController extends Controller
             'working_group_id' => $wgId,
             'customer_id' => $data['customer_id'] ?? null,
             'estimate_id' => null,
-            'customer_snapshot' => null,
+            'customer_snapshot' => $data['customer_snapshot'] ?? null,
             'currency' => $data['currency'] ?? 'LKR',
             'subtotal' => 0,
             'discount_total' => 0,
@@ -108,11 +160,30 @@ class OrderController extends Controller
             'grand_total' => 0,
             'status' => 'draft',
             'payment_status' => 'unpaid',
-            'ordered_at' => now(),
+            'ordered_at' => $data['ordered_at'] ?? now(),
             'meta' => null,
             'created_by' => $actor->id,
             'updated_by' => $actor->id,
         ]);
+
+        // If the UI submitted a full order payload (quotation-style), sync items + totals now.
+        try {
+            $this->edit->updateDraft($order, $data, $actor);
+        } catch (\Throwable $e) {
+            if ($request->expectsJson()) {
+                return response()->json(['ok' => false, 'message' => $e->getMessage()], 422);
+            }
+            return back()->with('error', $e->getMessage())->withInput();
+        }
+
+        if ($request->expectsJson()) {
+            return response()->json([
+                'ok' => true,
+                'id' => $order->id,
+                'redirect_url' => route('admin.orders.show', $order),
+                'edit_url' => route('admin.orders.edit', $order),
+            ]);
+        }
 
         return redirect()
             ->route('admin.orders.edit', $order)
@@ -182,28 +253,21 @@ class OrderController extends Controller
         $workingGroups = WorkingGroup::query()->orderBy('name')->get(['id', 'name']);
         $customers = Customer::query()
             ->orderBy('full_name')
-            ->limit(200)
-            ->get(['id', 'full_name', 'phone', 'email', 'working_group_id']);
+            ->limit(500)
+            ->get(['id', 'full_name', 'phone', 'email', 'working_group_id', 'type', 'status']);
 
-        $products = Product::query()
-            ->where('status', 'active')
-            ->where('product_type', '!=', 'finishing')
-            ->orderBy('name')
-            ->get(['id', 'name', 'product_code']);
-
-        $finishings = Product::query()
-            ->where('status', 'active')
-            ->where('product_type', 'finishing')
-            ->orderBy('name')
-            ->get(['id', 'name', 'product_code']);
+        $locked = $order->invoices()
+            ->whereNull('deleted_at')
+            ->whereNotIn('status', ['draft', 'void', 'refunded'])
+            ->exists();
 
         return view('admin.orders.form', [
             'mode' => 'edit',
             'order' => $order,
             'workingGroups' => $workingGroups,
             'customers' => $customers,
-            'products' => $products,
-            'finishings' => $finishings,
+            'products' => collect(),
+            'locked' => $locked,
         ]);
     }
 
@@ -219,11 +283,49 @@ class OrderController extends Controller
         $data = $request->validate([
             'customer_id' => ['nullable', 'integer', 'exists:customers,id'],
             'customer_snapshot' => ['nullable', 'array'],
-            'currency' => ['nullable', 'string', 'max:3'],
+            'currency' => ['nullable', 'string', 'max:8'],
             'ordered_at' => ['nullable', 'date'],
             'shipping_fee' => ['nullable', 'numeric'],
             'other_fee' => ['nullable', 'numeric'],
+
+            // Quote-like fields (stored in orders.meta.quote)
+            'valid_until' => ['nullable', 'date'],
+            'tax_mode' => ['nullable', 'string', 'in:none,inclusive,exclusive'],
+            'discount_mode' => ['nullable', 'string', 'in:none,percent,amount'],
+            'discount_value' => ['nullable', 'numeric', 'min:0'],
+            'notes_internal' => ['nullable', 'string', 'max:5000'],
+            'notes_customer' => ['nullable', 'string', 'max:5000'],
+            'terms' => ['nullable', 'string', 'max:8000'],
+
+            // Items payload
             'items' => ['nullable', 'array'],
+            'items.*.id' => ['nullable', 'integer'],
+            'items.*.product_id' => ['required_with:items', 'integer', 'exists:products,id'],
+            'items.*.variant_set_item_id' => ['nullable', 'integer'],
+            'items.*.roll_id' => ['nullable', 'integer'],
+            'items.*.title' => ['nullable', 'string', 'max:255'],
+            'items.*.description' => ['nullable', 'string'],
+            'items.*.qty' => ['nullable', 'integer', 'min:1'],
+            'items.*.width' => ['nullable', 'numeric', 'min:0'],
+            'items.*.height' => ['nullable', 'numeric', 'min:0'],
+            'items.*.unit' => ['nullable', 'string', 'max:10'],
+            'items.*.area_sqft' => ['nullable', 'numeric', 'min:0'],
+            'items.*.offcut_sqft' => ['nullable', 'numeric', 'min:0'],
+            'items.*.pricing_snapshot' => ['nullable', 'array'],
+            'items.*.unit_price' => ['nullable', 'numeric', 'min:0'],
+            'items.*.line_subtotal' => ['nullable', 'numeric', 'min:0'],
+            'items.*.discount_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.tax_amount' => ['nullable', 'numeric', 'min:0'],
+            'items.*.line_total' => ['nullable', 'numeric', 'min:0'],
+            'items.*.sort_order' => ['nullable', 'integer', 'min:0'],
+
+            'items.*.finishings' => ['nullable', 'array'],
+            'items.*.finishings.*.id' => ['nullable', 'integer'],
+            'items.*.finishings.*.finishing_product_id' => ['required_with:items.*.finishings', 'integer', 'exists:products,id'],
+            'items.*.finishings.*.label' => ['nullable', 'string', 'max:255'],
+            'items.*.finishings.*.remove' => ['nullable', 'boolean'],
+            'items.*.finishings.*.qty' => ['nullable', 'integer', 'min:1'],
+            'items.*.finishings.*.unit_price' => ['nullable', 'numeric', 'min:0'],
         ]);
 
         try {

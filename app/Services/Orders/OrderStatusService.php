@@ -2,10 +2,13 @@
 
 namespace App\Services\Orders;
 
+use App\Mail\OrderStatusChangedMail;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
@@ -172,8 +175,74 @@ class OrderStatusService
                 'created_at' => now(),
             ]);
 
+            $orderId = (int) $order->id;
+            $fromStatus = $from;
+            $toStatus = $to;
+            $reason = $why;
+
+            DB::afterCommit(function () use ($orderId, $fromStatus, $toStatus, $reason) {
+                try {
+                    $order = Order::query()
+                        ->with(['customer.user'])
+                        ->whereKey($orderId)
+                        ->first();
+
+                    if (! $order) {
+                        return;
+                    }
+
+                    $emails = $this->resolveRecipientEmails($order);
+                    if (count($emails) === 0) {
+                        return;
+                    }
+
+                    foreach ($emails as $email) {
+                        Mail::to($email)->send(new OrderStatusChangedMail(
+                            $order,
+                            (string) $fromStatus,
+                            (string) $toStatus,
+                            is_string($reason) ? $reason : null,
+                        ));
+                    }
+                } catch (\Throwable $e) {
+                    Log::warning('Order status change email failed', [
+                        'order_id' => $orderId,
+                        'from' => $fromStatus,
+                        'to' => $toStatus,
+                        'error' => $e->getMessage(),
+                    ]);
+                }
+            });
+
             return $order->fresh();
         });
+    }
+
+    private function resolveRecipientEmails(Order $order): array
+    {
+        $order->loadMissing(['customer.user']);
+
+        $emails = [];
+
+        $customerEmail = $order->customer?->email;
+        if (is_string($customerEmail) && trim($customerEmail) !== '') {
+            $emails[] = trim($customerEmail);
+        }
+
+        $userEmail = $order->customer?->user?->email;
+        if (is_string($userEmail) && trim($userEmail) !== '') {
+            $emails[] = trim($userEmail);
+        }
+
+        $snap = is_array($order->customer_snapshot) ? $order->customer_snapshot : [];
+        $snapEmail = $snap['email'] ?? null;
+        if (is_string($snapEmail) && trim($snapEmail) !== '') {
+            $emails[] = trim($snapEmail);
+        }
+
+        $emails = array_values(array_unique(array_filter($emails, fn ($e) => filter_var($e, FILTER_VALIDATE_EMAIL))));
+
+        return $emails;
     }
 
     private function normalizeStatus(string $status): string
@@ -186,4 +255,3 @@ class OrderStatusService
         return $status;
     }
 }
-
