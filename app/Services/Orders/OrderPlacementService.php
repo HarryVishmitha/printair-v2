@@ -263,6 +263,24 @@ class OrderPlacementService
         if (!empty($metaFromItem['artwork_external_url'] ?? null)) {
             $meta['artwork_external_url'] = $metaFromItem['artwork_external_url'];
         }
+
+        $sessionFiles = is_array($ci['files'] ?? null) ? (array) $ci['files'] : [];
+        $artworkFiles = collect($sessionFiles)
+            ->filter(fn ($f) => is_array($f) && !empty($f['path']))
+            ->map(fn ($f) => [
+                'disk' => $f['disk'] ?? 'public',
+                'path' => (string) ($f['path'] ?? ''),
+                'name' => $f['original_name'] ?? ($f['name'] ?? null),
+                'mime' => $f['mime'] ?? null,
+                'size_bytes' => $f['size_bytes'] ?? null,
+            ])
+            ->values()
+            ->all();
+
+        if (count($artworkFiles) > 0) {
+            $meta['artwork_files'] = $artworkFiles;
+        }
+
         $snapshot['meta'] = $meta ?: null;
 
         $productId = (int) ($ci['product_id'] ?? 0);

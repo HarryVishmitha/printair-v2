@@ -151,7 +151,7 @@ class CartController extends Controller
                 'pricing_snapshot' => $it['pricing_snapshot'] ?? null,
                 'notes' => $it['notes'] ?? null,
                 'meta' => $meta,
-                'files' => [],
+                'files' => array_values(array_filter((array) ($it['files'] ?? []), fn ($f) => is_array($f) && !empty($f['path']))),
                 'product' => $p ? $this->buildPublicProductJson($p) : null,
             ];
         }
@@ -363,6 +363,29 @@ class CartController extends Controller
         return response()->json([
             'ok' => true,
             'file' => $fileRow,
+        ]);
+    }
+
+    /**
+     * Guest session cart: upload file to a session cart item by UUID.
+     */
+    public function guestUploadArtwork(Request $request)
+    {
+        abort_unless(! Auth::check(), 403);
+
+        $request->validate([
+            'item_uuid' => ['required', 'string', 'max:80'],
+            'file' => ['required', 'file', 'max:102400'], // 100MB in KB
+        ]);
+
+        $fileEntry = $this->cart->attachArtworkFileToSessionItem(
+            (string) $request->input('item_uuid'),
+            $request->file('file')
+        );
+
+        return response()->json([
+            'ok' => true,
+            'file' => $fileEntry,
         ]);
     }
 

@@ -3,14 +3,15 @@
     <script src="https://code.iconify.design/3/3.1.1/iconify.min.js"></script>
 
     <div
-        x-data="printairCheckout({
-            csrf: @js(csrf_token()),
-            endpoints: {
-                guestStart: @js(route('checkout.guest.start')),
-                guestVerify: @js(route('checkout.guest.verify')),
-                placeOrder: @js(route('checkout.place')),
-                cartShow: @js(route('cart.show')),
-                addressesIndex: @js(route('checkout.addresses.index')),
+	        x-data="printairCheckout({
+	            csrf: @js(csrf_token()),
+	            endpoints: {
+	                home: @js(url('/')),
+	                guestStart: @js(route('checkout.guest.start')),
+	                guestVerify: @js(route('checkout.guest.verify')),
+	                placeOrder: @js(route('checkout.place')),
+	                cartShow: @js(route('cart.show')),
+	                addressesIndex: @js(route('checkout.addresses.index')),
                 addressesStore: @js(route('checkout.addresses.store')),
             }
         })"
@@ -467,15 +468,18 @@
                             }
                         };
 
-                        const data = await this.post(this.endpoints.placeOrder, payload);
+	                        const data = await this.post(this.endpoints.placeOrder, payload);
 
-                        this.setFlash('success', data.message || 'Order submitted.');
-                        this.submitted.orderId = data.order_id || null;
-                    } catch (e) {
-                        this.setFlash('error', e.message || 'Failed to submit order.');
-                    } finally {
-                        this.busy.placeOrder = false;
-                    }
+	                        this.setFlash('success', (data.message || 'Order submitted.') + ' Redirecting…');
+	                        this.submitted.orderId = data.order_id || null;
+	                        window.setTimeout(() => {
+	                            window.location.href = this.endpoints.home || '/';
+	                        }, 800);
+	                    } catch (e) {
+	                        this.setFlash('error', e.message || 'Failed to submit order.');
+	                    } finally {
+	                        this.busy.placeOrder = false;
+	                    }
                 },
 
                 async loadAddresses() {

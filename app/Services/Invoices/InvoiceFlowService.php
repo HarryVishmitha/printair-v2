@@ -210,6 +210,16 @@ class InvoiceFlowService
 
             $invoice->update($updates);
 
+            $invoiceIdForEmail = (int) $invoice->id;
+            $actorIdForEmail = (int) $actor->id;
+            DB::afterCommit(function () use ($invoiceIdForEmail, $actorIdForEmail) {
+                try {
+                    app(InvoiceDeliveryService::class)->emailIssuedInvoiceToCustomerById($invoiceIdForEmail, $actorIdForEmail);
+                } catch (\Throwable $e) {
+                    report($e);
+                }
+            });
+
             // Freeze final order total when final invoice is issued.
             if ($invoice->type === 'final' && Schema::hasColumn('orders', 'final_grand_total')) {
                 $order = Order::query()->whereKey($invoice->order_id)->lockForUpdate()->first();

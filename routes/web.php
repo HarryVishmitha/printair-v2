@@ -146,6 +146,8 @@ Route::prefix('cart')->name('cart.')->group(function () {
 
     Route::post('/guest/items/artwork-url', [CartController::class, 'guestSaveArtworkUrl'])
         ->name('guest.items.artwork.url');
+    Route::post('/guest/items/artwork-upload', [CartController::class, 'guestUploadArtwork'])
+        ->name('guest.items.artwork.upload');
 
     Route::post('/guest/items/update', [CartController::class, 'guestUpdateItem'])
         ->name('guest.items.update');

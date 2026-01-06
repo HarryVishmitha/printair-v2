@@ -79,24 +79,7 @@ class CartService
 
     public function attachArtworkFileToDbItem(CartItem $item, UploadedFile $file): CartItemFile
     {
-        if ($file->getSize() > self::MAX_BYTES) {
-            abort(422, 'File too large. Please upload to a storage service and paste the link.');
-        }
-
-        $mime = $file->getClientMimeType();
-        $allowed = [
-            'application/pdf',
-            'image/png',
-            'image/jpeg',
-            'application/octet-stream',
-        ];
-
-        $ext = strtolower($file->getClientOriginalExtension());
-        $allowedExt = ['pdf', 'png', 'jpg', 'jpeg', 'ai', 'psd'];
-
-        if (! in_array($mime, $allowed, true) && ! in_array($ext, $allowedExt, true)) {
-            abort(422, 'Invalid file type. Allowed: PDF, AI, PSD, JPG, PNG.');
-        }
+        $mime = $this->validateArtworkFile($file);
 
         return DB::transaction(function () use ($item, $file, $mime) {
             $path = $file->store('cart/artwork', 'public');
@@ -115,6 +98,51 @@ class CartService
         });
     }
 
+    public function attachArtworkFileToSessionItem(string $itemUuid, UploadedFile $file): array
+    {
+        $mime = $this->validateArtworkFile($file);
+
+        $cart = $this->getCart();
+        if (! is_array($cart)) {
+            abort(422, 'Guest upload requires a session cart.');
+        }
+
+        $path = $file->store('cart/artwork', 'public');
+
+        $fileEntry = [
+            'id' => (string) Str::uuid(),
+            'disk' => 'public',
+            'path' => $path,
+            'original_name' => $file->getClientOriginalName(),
+            'mime' => $mime,
+            'size_bytes' => $file->getSize(),
+            'is_customer_artwork' => true,
+            'meta' => [
+                'uploaded_by' => null,
+            ],
+        ];
+
+        if (! is_array($cart['items'] ?? null)) {
+            $cart['items'] = [];
+        }
+
+        foreach ($cart['items'] as &$it) {
+            if ((string) ($it['id'] ?? '') !== (string) $itemUuid) {
+                continue;
+            }
+
+            $it['files'] = is_array($it['files'] ?? null) ? $it['files'] : [];
+            array_unshift($it['files'], $fileEntry);
+            $this->saveGuestCart($cart);
+            unset($it);
+
+            return $fileEntry;
+        }
+        unset($it);
+
+        abort(404, 'Cart item not found.');
+    }
+
     public function attachExternalArtworkUrlToDbItem(CartItem $item, string $url): void
     {
         $meta = $item->meta ?? [];
@@ -127,6 +155,34 @@ class CartService
         }
 
         $item->update(['meta' => $meta ?: []]);
+    }
+
+    private function validateArtworkFile(UploadedFile $file): string
+    {
+        if ($file->getSize() > self::MAX_BYTES) {
+            abort(422, 'File too large. Please upload to a storage service and paste the link.');
+        }
+
+        $mime = $file->getClientMimeType();
+        $allowed = [
+            'application/pdf',
+            'image/png',
+            'image/jpeg',
+            'application/octet-stream',
+        ];
+
+        $ext = strtolower($file->getClientOriginalExtension());
+        $allowedExt = ['pdf', 'png', 'jpg', 'jpeg', 'ai', 'psd'];
+
+        if ($mime === 'application/octet-stream' && ! in_array($ext, $allowedExt, true)) {
+            abort(422, 'Invalid file type. Allowed: PDF, AI, PSD, JPG, PNG.');
+        }
+
+        if (! in_array($mime, $allowed, true) && ! in_array($ext, $allowedExt, true)) {
+            abort(422, 'Invalid file type. Allowed: PDF, AI, PSD, JPG, PNG.');
+        }
+
+        return $mime ?: 'application/octet-stream';
     }
 
     private function getOrCreateDbCart(): Cart

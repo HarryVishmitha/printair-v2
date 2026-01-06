@@ -18,6 +18,7 @@
                 saveUrlDb: @js(route('cart.items.artwork.url', ['item' => 0])),
                 uploadDb: @js(route('cart.items.artwork.upload', ['item' => 0])),
                 saveUrlGuest: @js(route('cart.guest.items.artwork.url')),
+                uploadGuest: @js(route('cart.guest.items.artwork.upload')),
                 updateDb: @js(route('cart.items.update', ['item' => 0])),
                 deleteDb: @js(route('cart.items.delete', ['item' => 0])),
                 updateGuest: @js(route('cart.guest.items.update')),
@@ -323,48 +324,40 @@
                             </div>
 
                             <div class="mt-3 grid grid-cols-1 lg:grid-cols-2 gap-3">
-                                {{-- Upload (only for logged-in DB cart items) --}}
+                                {{-- Upload --}}
                                 <div class="rounded-2xl border border-slate-200 bg-white p-4">
                                     <div class="text-[11px] font-semibold text-slate-600 mb-2 flex items-center gap-2">
                                         <span class="iconify" data-icon="mdi:cloud-upload-outline"></span>
                                         Upload file (PDF/AI/PSD/JPG/PNG)
                                     </div>
 
-                                    <template x-if="!isAuthed">
-                                        <div class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-xs text-slate-600">
-                                            Login to upload files. Guests can paste a share link on the right.
-                                        </div>
-                                    </template>
+                                    <div>
+                                        <input type="file"
+                                            class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
+                                            accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
+                                            @change="handleArtworkUpload(it, $event)">
 
-                                    <template x-if="isAuthed">
-                                        <div>
-                                            <input type="file"
-                                                class="w-full rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm"
-                                                accept=".pdf,.ai,.psd,.png,.jpg,.jpeg,application/pdf,image/png,image/jpeg"
-                                                @change="handleDbUpload(it, $event)">
+                                        <template x-if="it.upload_state?.too_large">
+                                            <div class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
+                                                <span class="font-extrabold">File is larger than 100MB.</span>
+                                                Upload it to Drive/Dropbox and paste the link on the right (visible always).
+                                            </div>
+                                        </template>
 
-                                            <template x-if="it.upload_state?.too_large">
-                                                <div class="mt-2 rounded-xl border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-900">
-                                                    <span class="font-extrabold">File is larger than 100MB.</span>
-                                                    Upload it to Drive/Dropbox and paste the link on the right (visible always).
+                                        <template x-if="it.upload_state?.uploaded_files?.length">
+                                            <div class="mt-3 text-xs text-slate-700">
+                                                <div class="font-extrabold flex items-center gap-2">
+                                                    <span class="iconify" data-icon="mdi:file-multiple-outline"></span>
+                                                    Uploaded files
                                                 </div>
-                                            </template>
-
-                                            <template x-if="it.upload_state?.uploaded_files?.length">
-                                                <div class="mt-3 text-xs text-slate-700">
-                                                    <div class="font-extrabold flex items-center gap-2">
-                                                        <span class="iconify" data-icon="mdi:file-multiple-outline"></span>
-                                                        Uploaded files
-                                                    </div>
-                                                    <ul class="mt-1 list-disc ml-5">
-                                                        <template x-for="f in it.upload_state.uploaded_files" :key="f.id">
-                                                            <li class="break-all" x-text="f.original_name || f.path"></li>
-                                                        </template>
-                                                    </ul>
-                                                </div>
-                                            </template>
-                                        </div>
-                                    </template>
+                                                <ul class="mt-1 list-disc ml-5">
+                                                    <template x-for="f in it.upload_state.uploaded_files" :key="f.id">
+                                                        <li class="break-all" x-text="f.original_name || f.path"></li>
+                                                    </template>
+                                                </ul>
+                                            </div>
+                                        </template>
+                                    </div>
                                 </div>
 
                                 {{-- URL (always visible) --}}
@@ -615,7 +608,7 @@
                                 busy_save_url: false,
                                 busy_remove: false,
                                 busy_update: false,
-                                upload_state: { too_large: false, uploaded_files: [] },
+                                upload_state: { too_large: false, uploaded_files: (it.files || []) },
                             });
 
                             this.applyFinishingDefaults(out[out.length - 1]);
@@ -976,8 +969,7 @@
                     }
                 },
 
-                async handleDbUpload(it, e) {
-                    if (!this.isAuthed) return;
+                async handleArtworkUpload(it, e) {
                     const file = e?.target?.files?.[0];
                     if (!file) return;
 
@@ -1001,9 +993,16 @@
                     }
 
                     try {
-                        const endpoint = endpoints.uploadDb.replace('/0/', `/${it.db_id}/`);
                         const fd = new FormData();
                         fd.append('file', file);
+
+                        let endpoint = null;
+                        if (it.mode === 'db') {
+                            endpoint = endpoints.uploadDb.replace('/0/', `/${it.db_id}/`);
+                        } else {
+                            endpoint = endpoints.uploadGuest;
+                            fd.append('item_uuid', it.id);
+                        }
 
                         const res = await fetch(endpoint, {
                             method: 'POST',
